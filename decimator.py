@@ -4,6 +4,7 @@ class Decimator():
         self.level = kwargs.get("level")
         self.poly_data = kwargs.get("poly_data")
 
+
     def decimate(self):
         dec = vtk.vtkDecimatePro()
         dec.SetInputData(self.poly_data)
@@ -12,3 +13,8 @@ class Decimator():
 
         decimatedPoly = vtk.vtkPolyData()
         decimatedPoly.ShallowCopy(dec.GetOutput())
+        self.decimated_poly = decimatedPoly
+
+
+    def get_decimated_poly(self):
+        return self.decimated_poly

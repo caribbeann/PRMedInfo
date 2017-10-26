@@ -1,6 +1,11 @@
 from openmesh import *
 
+
+ar = TriMeshModAspectRatio()
+
+
 mesh = TriMesh()
+
 
 read_mesh(mesh, r"image data\lowerJawMesh.obj")
 
