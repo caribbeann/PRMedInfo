@@ -105,3 +105,19 @@ class MeshOperations:
         centerOfMassFilter.Update()
         center = [0.0,0.0,0.0]
         return centerOfMassFilter.GetCenter()#(center)
+
+    def cropMesh(self,xmin,xmax,ymin,ymax,zmin,zmax):
+        box = vtk.vtkBox()
+        box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+
+
+        pdNormals = vtk.vtkPolyDataNormals()
+        pdNormals.SetInputData(self.poly_data)
+
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputConnection(pdNormals.GetOutputPort())
+        clipper.SetClipFunction(box)
+        clipper.GenerateClippedOutputOn()
+        clipper.InsideOutOff()
+        clipper.Update()
+        return clipper.GetClippedOutput()
