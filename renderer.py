@@ -14,6 +14,16 @@ class Renderer():
 
         ren = vtk.vtkRenderer()
 
+        transform = vtk.vtkTransform()
+        transform.Translate(1.0, 0.0, 0.0)
+        transform.Scale(50,50,50)
+         
+        axes = vtk.vtkAxesActor()
+        axes.SetUserTransform(transform)
+        ren.AddActor(axes)
+
+        ren.ResetCamera()
+
         renWin = vtk.vtkRenderWindow()
 
         renWin.AddRenderer(ren)
