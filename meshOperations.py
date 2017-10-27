@@ -6,7 +6,7 @@ class MeshOperations:
 
     def translate(self,x,y,z):
         transform = vtk.vtkTransform()
-        transform.Transalte(x,y,z)
+        transform.Translate(x,y,z)
         transformFilter=vtk.vtkTransformPolyDataFilter()
         transformFilter.SetTransform(transform)
         if vtk.VTK_MAJOR_VERSION <= 5:
@@ -21,8 +21,6 @@ class MeshOperations:
         rotAxis = [0.0,0.0,0.0]
         vmath.Cross(newVect,oldVect,rotAxis)
         theta = vmath.AngleBetweenVectors(oldVect,newVect)
-
-        print vmath.DegreesFromRadians(theta)
 
         transform = vtk.vtkTransform()
         transform.RotateWXYZ(vmath.DegreesFromRadians(theta),rotAxis)
@@ -95,3 +93,15 @@ class MeshOperations:
 
 
         return {'eigenvalues':eigenvalues,'eigenvectors':[eigv0,eigv1,eigv2]}
+
+
+    def computeCenterOfMass(self):
+        centerOfMassFilter = vtk.vtkCenterOfMass()
+        if vtk.VTK_MAJOR_VERSION<=5:
+            centerOfMassFilter.SetInput(self.poly_data)
+        else:
+            centerOfMassFilter.SetInputData(self.poly_data)
+        centerOfMassFilter.SetUseScalarsAsWeights(False)
+        centerOfMassFilter.Update()
+        center = [0.0,0.0,0.0]
+        return centerOfMassFilter.GetCenter()#(center)

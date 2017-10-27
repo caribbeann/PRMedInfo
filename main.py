@@ -15,6 +15,13 @@ reader.Update()
 
 polydata = reader.GetOutput()
 
+print polydata.GetBounds()[0]
+print polydata.GetBounds()[1]
+print polydata.GetBounds()[2]
+print polydata.GetBounds()[3]
+print polydata.GetBounds()[4]
+print polydata.GetBounds()[5]
+
 my_renderer = renderer.Renderer(poly_data=polydata, wire_frame=False)
 my_renderer.render()
 
