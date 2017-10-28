@@ -106,6 +106,7 @@ class MeshOperations:
         center = [0.0,0.0,0.0]
         return centerOfMassFilter.GetCenter()#(center)
 
+    # crop the mesh, keep what is inside the box
     def cropMesh(self,xmin,xmax,ymin,ymax,zmin,zmax):
         box = vtk.vtkBox()
         box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
@@ -121,3 +122,87 @@ class MeshOperations:
         clipper.InsideOutOff()
         clipper.Update()
         return clipper.GetClippedOutput()
+
+    def meshTo3DImg(self):
+        whiteImage = vtk.vtkImageData()
+        bounds = polydata.GetBounds()
+        spacing = [0.5,0.5,0.5]
+        whiteImage.SetSpacing(spacing)
+        dim = [0,0,0]
+        for i in range (0,3):
+            dim[i] = int(math.ceil(bounds[i*2+1]-bounds[i*2])/spacing[i])
+            print dim[i]
+        whiteImage.SetDimensions(dim)
+        whiteImage.SetExtent(0,dim[0]-1,0,dim[1]-1,0,dim[2]-1)
+        origin = [bounds[0]+spacing[0]/2,bounds[2]+spacing[1]/2,bounds[4]+spacing[2]/2]
+        whiteImage.SetOrigin(origin)
+
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            whiteImage.SetScalarTypeToUnsignedChar()
+            whiteImage.AllocateScalars()
+        else:
+            whiteImage.AllocateScalars(vtk.VTK_UNSIGNED_CHAR,1)
+
+        inval = 255
+        outval = 0
+        for i in range (0, whiteImage.GetNumberOfPoints()):
+            whiteImage.GetPointData().GetScalars().SetTuple1(i,inval)
+
+        pol2stenc = vtk.vtkPolyDataToImageStencil()
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            pol2stenc.SetInput(polydata)
+        else:
+            pol2stenc.SetInputData(polydata)
+
+        pol2stenc.SetOutputOrigin(origin)
+        pol2stenc.SetOutputSpacing(spacing)
+        pol2stenc.SetOutputWholeExtent(whiteImage.GetExtent())
+        pol2stenc.Update()
+
+        imgstenc = vtk.vtkImageStencil()
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            imgstenc.SetInput(whiteImage)
+            imgstenc.SetStencil(pol2stenc.GetOutput())
+        else:
+            imgstenc.SetInputData(whiteImage)
+            imgstenc.SetStencilConnection(pol2stenc.GetOutputPort())
+
+        imgstenc.ReverseStencilOff()
+        imgstenc.SetBackgroundValue(outval)
+        imgstenc.Update()
+        return imgstenc.GetOutput()
+
+    def nbPointsSideBox(self,xmin,xmax,ymin,ymax,zmin,zmax):
+        box = vtk.vtkCubeSource()
+        box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+        box.Update()
+
+        selectEnclosedPoints = vtk.vtkSelectEnclosedPoints()
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            selectEnclosedPoints.SetInput(self.poly_data)
+            selectEnclosedPoints.SetSurface(box.GetOutput())
+        else:
+            selectEnclosedPoints.SetInputData(selfpoly_data)
+            selectEnclosedPoints.SetSurfaceData(box.GetOutput())
+
+        selectEnclosedPoints.Update()
+
+        nbOfPointsInside = 0
+        for i in range (0, self.poly_data.GetNumberOfPoints()):
+            if selectEnclosedPoints.IsInside(i):
+                nbOfPointsInside = nbOfPointsInside + 1
+
+        return nbOfPointsInside    
+
+    def extractEdges(self):
+        vextractEdges = vtk.vtkFeatureEdges()
+        vextractEdges.FeatureEdgesOn()
+        vextractEdges.BoundaryEdgesOff()
+        vextractEdges.ColoringOn()
+        vextractEdges.SetInputData(self.poly_data)
+        vextractEdges.Update()    
+        return vextractEdges.GetOutput()
+
+
+    def changePolyData(self, polydata):
+        self.poly_data = polydata    

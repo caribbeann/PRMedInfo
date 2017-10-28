@@ -28,9 +28,9 @@ my_renderer.render()
 meshOp = meshOperations.MeshOperations(poly_data=polydata)
 PCADict = meshOp.computePCA()
 reorientedPolyData = meshOp.rotate([1.0,0.0,0.0],PCADict['eigenvectors'][0])
-meshOp2 = meshOperations.MeshOperations(poly_data=reorientedPolyData)
-PCADict2 = meshOp2.computePCA()
-reorientedPolyData = meshOp2.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
+meshOp.changePolyData(reorientedPolyData)
+PCADict2 = meshOp.computePCA()
+reorientedPolyData = meshOp.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
 
 
 my_renderer2 = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
