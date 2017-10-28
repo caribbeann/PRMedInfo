@@ -1,4 +1,5 @@
 import vtk
+import math
 
 class MeshOperations:
     def __init__(self, *args, **kwargs):
@@ -21,6 +22,7 @@ class MeshOperations:
         rotAxis = [0.0,0.0,0.0]
         vmath.Cross(newVect,oldVect,rotAxis)
         theta = vmath.AngleBetweenVectors(oldVect,newVect)
+        print vmath.DegreesFromRadians(theta)
 
         transform = vtk.vtkTransform()
         transform.RotateWXYZ(vmath.DegreesFromRadians(theta),rotAxis)
@@ -172,7 +174,7 @@ class MeshOperations:
         imgstenc.Update()
         return imgstenc.GetOutput()
 
-    def nbPointsSideBox(self,xmin,xmax,ymin,ymax,zmin,zmax):
+    def nbPointsInsideBox(self,xmin,xmax,ymin,ymax,zmin,zmax):
         box = vtk.vtkCubeSource()
         box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
         box.Update()
@@ -182,7 +184,7 @@ class MeshOperations:
             selectEnclosedPoints.SetInput(self.poly_data)
             selectEnclosedPoints.SetSurface(box.GetOutput())
         else:
-            selectEnclosedPoints.SetInputData(selfpoly_data)
+            selectEnclosedPoints.SetInputData(self.poly_data)
             selectEnclosedPoints.SetSurfaceData(box.GetOutput())
 
         selectEnclosedPoints.Update()
@@ -192,7 +194,9 @@ class MeshOperations:
             if selectEnclosedPoints.IsInside(i):
                 nbOfPointsInside = nbOfPointsInside + 1
 
-        return nbOfPointsInside    
+        return nbOfPointsInside 
+
+ 
 
     def extractEdges(self):
         vextractEdges = vtk.vtkFeatureEdges()
