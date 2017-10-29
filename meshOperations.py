@@ -127,7 +127,7 @@ class MeshOperations:
 
     def meshTo3DImg(self):
         whiteImage = vtk.vtkImageData()
-        bounds = polydata.GetBounds()
+        bounds = self.poly_data.GetBounds()
         spacing = [0.5,0.5,0.5]
         whiteImage.SetSpacing(spacing)
         dim = [0,0,0]
@@ -152,9 +152,9 @@ class MeshOperations:
 
         pol2stenc = vtk.vtkPolyDataToImageStencil()
         if vtk.VTK_MAJOR_VERSION <= 5:
-            pol2stenc.SetInput(polydata)
+            pol2stenc.SetInput(self.poly_data)
         else:
-            pol2stenc.SetInputData(polydata)
+            pol2stenc.SetInputData(self.poly_data)
 
         pol2stenc.SetOutputOrigin(origin)
         pol2stenc.SetOutputSpacing(spacing)
