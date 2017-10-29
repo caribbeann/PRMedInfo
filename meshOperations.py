@@ -22,7 +22,7 @@ class MeshOperations:
         rotAxis = [0.0,0.0,0.0]
         vmath.Cross(newVect,oldVect,rotAxis)
         theta = vmath.AngleBetweenVectors(oldVect,newVect)
-        print vmath.DegreesFromRadians(theta)
+        #print vmath.DegreesFromRadians(theta)
 
         transform = vtk.vtkTransform()
         transform.RotateWXYZ(vmath.DegreesFromRadians(theta),rotAxis)
@@ -36,6 +36,11 @@ class MeshOperations:
         transformFilter.Update()
 
         return transformFilter.GetOutput()
+
+    def move_to_origin(self):
+        x, y, z = self.computeCenterOfMass()
+        moved_poly_data = self.translate(-x, -y, -z)
+        return moved_poly_data
 
     def computePCA(self):
         xArray = vtk.vtkDoubleArray()
@@ -105,7 +110,7 @@ class MeshOperations:
             centerOfMassFilter.SetInputData(self.poly_data)
         centerOfMassFilter.SetUseScalarsAsWeights(False)
         centerOfMassFilter.Update()
-        center = [0.0,0.0,0.0]
+
         return centerOfMassFilter.GetCenter()#(center)
 
     # crop the mesh, keep what is inside the box
