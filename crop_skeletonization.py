@@ -2,6 +2,8 @@ import renderer
 import meshOperations
 import decimator
 import vtk
+import numpy as np
+
 
 # my_renderer = renderer.Renderer(file_name=r".\image data\lowerJawMesh.obj", wire_frame=False)
 
@@ -10,7 +12,7 @@ import vtk
 
 reader = vtk.vtkOBJReader()
 
-reader.SetFileName(r".\image data\upperJawMesh.obj")
+reader.SetFileName(r".\image data\lowerJawMesh.obj")
 
 reader.Update()
 
@@ -31,8 +33,8 @@ moved_poly_data = meshOp.move_to_origin()
 meshOp.changePolyData(moved_poly_data)
 
 
-my_renderer = renderer.Renderer(poly_data=moved_poly_data, wire_frame=False)
-my_renderer.render()
+#my_renderer = renderer.Renderer(poly_data=moved_poly_data, wire_frame=False)
+#my_renderer.render()
 
 # compute PCA 3 times to align the object main axis with the coordinate system
 # PCADict = meshOp.computePCA()
@@ -60,8 +62,8 @@ meshOp.changePolyData(moved_poly_data)
 reorientedPolyData = moved_poly_data
 meshOp.changePolyData(reorientedPolyData)
 
-my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
-my_renderer.render()
+#my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
+#my_renderer.render()
 
 extent = reorientedPolyData.GetBounds()[1] - reorientedPolyData.GetBounds()[0]
 
@@ -90,16 +92,16 @@ if int(third1_poly.GetBounds()[5]) == int(third2_poly.GetBounds()[5]) == int(thi
     meshOp.changePolyData(reorientedPolyData)
     reorientedPolyData = meshOp.move_to_origin()
 
-my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
-my_renderer.render()
+#my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
+#my_renderer.render()
 
 
 # move object to origin of Z
 meshOp.changePolyData(reorientedPolyData)
 reorientedPolyData = meshOp.translate(0,0,-reorientedPolyData.GetBounds()[4])
 
-my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
-my_renderer.render()
+#my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
+#my_renderer.render()
 
 
 
@@ -109,15 +111,37 @@ my_renderer.render()
 #### 2. SIMPLIFY (decimate) MESH ####
 #####################################
 
-decimator = decimator.Decimator(level=0.9, poly_data=reorientedPolyData)
-dec_poly_data = decimator.decimate()
+decimator = decimator.Decimator(level=0.0, poly_data=reorientedPolyData)
+decimator.decimate()
+dec_poly_data = decimator.get_decimated_poly()
 
-
+######################
 #### 3. CROP MESH ####
-mesh_op2 = meshOperations.MeshOperations(poly_data=dec_poly_data)  # use the decimated polydata
-cropped_poly_data = mesh_op2.cropMesh(dec_poly_data.GetBounds()[0], dec_poly_data.GetBounds()[1],
-                                      dec_poly_data.GetBounds()[2], dec_poly_data.GetBounds()[3],
-                                      dec_poly_data.GetBounds()[4], 0.8*dec_poly_data.GetBounds()[5])
+######################
 
-my_renderer3 = renderer.Renderer(poly_data=cropped_poly_data, wire_frame=False)
-my_renderer3.render()
+meshOp.changePolyData(dec_poly_data)
+
+con_filter = vtk.vtkPolyDataConnectivityFilter()
+
+last_biggest_percentage = 0
+last_crop_poly = None
+for i in np.arange(0.50, 0.9, 0.025):
+    cropped_poly_data = meshOp.cropMesh(dec_poly_data.GetBounds()[0], dec_poly_data.GetBounds()[1],
+                                          dec_poly_data.GetBounds()[2], dec_poly_data.GetBounds()[3],
+                                        i * dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5])
+    con_filter.SetInputData(cropped_poly_data)
+    con_filter.SetExtractionModeToAllRegions()
+    con_filter.Update()
+    if con_filter.GetNumberOfExtractedRegions()==1:
+        if i>last_biggest_percentage:
+            last_biggest_percentage = i
+            last_crop_poly = cropped_poly_data
+
+
+my_renderer = renderer.Renderer(poly_data=last_crop_poly, wire_frame=False)
+my_renderer.render()
+
+
+#############################
+#### 4. SKELETONIZE/THIN ####
+#############################
