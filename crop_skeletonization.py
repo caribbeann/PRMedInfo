@@ -2,7 +2,9 @@ import renderer
 import meshOperations
 import decimator
 import vtk
+from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
+import math
 
 
 # my_renderer = renderer.Renderer(file_name=r".\image data\lowerJawMesh.obj", wire_frame=False)
@@ -111,9 +113,9 @@ reorientedPolyData = meshOp.translate(0,0,-reorientedPolyData.GetBounds()[4])
 #### 2. SIMPLIFY (decimate) MESH ####
 #####################################
 
-decimator = decimator.Decimator(level=0.0, poly_data=reorientedPolyData)
-decimator.decimate()
-dec_poly_data = decimator.get_decimated_poly()
+dec = decimator.Decimator(level=0.0, poly_data=reorientedPolyData)
+dec.decimate()
+dec_poly_data = dec.get_decimated_poly()
 
 ######################
 #### 3. CROP MESH ####
@@ -138,10 +140,42 @@ for i in np.arange(0.50, 0.9, 0.025):
             last_crop_poly = cropped_poly_data
 
 
-my_renderer = renderer.Renderer(poly_data=last_crop_poly, wire_frame=False)
+
+
+
+#####################################
+#### 4. SIMPLIFY (decimate) MESH (again) ####
+#####################################
+
+dec = decimator.Decimator(level=0.0, poly_data=last_crop_poly)
+dec.decimate()
+dec_poly_data = dec.get_decimated_poly()
+
+
+#############################
+#### 5. SKELETONIZE/THIN ####
+#############################
+
+# get outer edges
+
+featureEdges = vtk.vtkFeatureEdges()
+
+featureEdges.SetInputData(dec_poly_data)
+featureEdges.BoundaryEdgesOn()
+featureEdges.FeatureEdgesOff()
+featureEdges.ManifoldEdgesOff()
+featureEdges.NonManifoldEdgesOff()
+featureEdges.Update()
+edge_poly = featureEdges.GetOutput()
+
+
+# move edges polydata to the XY plane and in Y positive region
+meshOp.changePolyData(edge_poly)
+edge_poly = meshOp.translate(0,-edge_poly.GetBounds()[2], -edge_poly.GetBounds()[4])
+x,y,z = meshOp.computeCenterOfMass()
+edge_poly = meshOp.translate(-x,-y,-z)
+my_renderer = renderer.Renderer(poly_data=edge_poly, wire_frame=False)
 my_renderer.render()
 
 
-#############################
-#### 4. SKELETONIZE/THIN ####
-#############################
+
