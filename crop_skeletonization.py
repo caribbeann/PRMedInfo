@@ -2,6 +2,7 @@ import renderer
 import meshOperations
 import decimator
 import vtk
+import vtkpointcloud
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 import math
@@ -209,28 +210,43 @@ edge_poly = meshOp.translate(0,0,0)
 meshOp.changePolyData(edge_poly)
 
 
-# regenerate the poly with actual points because otherwise it can't detect intersection with a plane
-edge_points = vtk.vtkPoints()
-for i in range(edge_poly.GetNumberOfPoints()):
-    p = edge_poly.GetPoint(i)
-    edge_points.InsertPoint(i, p)
+# get intersection of rays sent from the center of mass outwards
+locator = vtk.vtkCellLocator()
+locator.SetDataSet(edge_poly)
+locator.BuildLocator()
+
+cells = vtk.vtkIdList()
+
+"""
+create line set
+
+for each line:
+    get 2 cells that are intersected
+    get 2 points between the 4 ends of the celss
+    get middle point between the 2 points
+    add it to a point cloud
+
+connect the points
+    
+"""
+
+nr = locator.FindCellsAlongLine([0,0,0],[0,50,0],0.001, cells)
 
 
-edge_poly_new = vtk.vtkPolyData()
-edge_poly_new.SetPoints(edge_points)
 
-my_renderer = renderer.Renderer(poly_data=edge_poly_new, wire_frame=False)
-my_renderer.render()
+#rend=renderer.Renderer(poly_data=poly, wire_frame=False)
+#rend.render()
 
-print intersect_plane_with_edges(edge_poly, [100,100,0])
+
+#print intersect_plane_with_edges(poly, [100,100,0])
 
 mapper = vtk.vtkPolyDataMapper()
 mapper.SetInputData(edge_poly)
 
-line = vtk.vtkPlaneSource()
-line.SetOrigin(-20,-20,-20)
-line.SetPoint1(0,0,100)
-line.SetPoint2(100,100,0)
+line = vtk.vtkLineSource()
+
+line.SetPoint1(0,0,0)
+line.SetPoint2(0,50,0)
 line.Update()
 line_poly = line.GetOutput()
 

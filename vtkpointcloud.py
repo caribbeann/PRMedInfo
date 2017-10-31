@@ -1,5 +1,5 @@
 import vtk
-
+import random
 class VtkPointCloud:
 
     def __init__(self, zMin=-10.0, zMax=10.0, maxNumPoints=1e6):
