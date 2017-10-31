@@ -37,6 +37,18 @@ class MeshOperations:
 
         return transformFilter.GetOutput()
 
+    def scale(self, x,y,z):
+        transform = vtk.vtkTransform()
+        transform.Scale(x, y, z)
+        transformFilter = vtk.vtkTransformPolyDataFilter()
+        transformFilter.SetTransform(transform)
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            transformFilter.SetInput(self.poly_data)
+        else:
+            transformFilter.SetInputData(self.poly_data)
+        transformFilter.Update()
+        return transformFilter.GetOutput()
+
     def move_to_origin(self):
         x, y, z = self.computeCenterOfMass()
         moved_poly_data = self.translate(-x, -y, -z)

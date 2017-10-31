@@ -34,9 +34,9 @@ class Renderer():
 
         iren.SetRenderWindow(renWin)
 
-        style = vtk.vtkInteractorStyleTrackballCamera()
+        #style = vtk.vtkInteractorStyleTrackballCamera()
 
-        iren.SetInteractorStyle(style)
+        #iren.SetInteractorStyle(style)
 
 
         ren.AddActor(self.__polyDataToActor())
@@ -88,6 +88,6 @@ class Renderer():
         if self.wire_frame:
             actor.GetProperty().SetRepresentationToWireframe()
 
-        actor.GetProperty().SetColor(0.5, 0.5, 1.0)
+        actor.GetProperty().SetColor(0.8, 0.8, 1.0)
 
         return actor
