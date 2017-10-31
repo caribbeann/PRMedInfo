@@ -156,6 +156,33 @@ dec_poly_data = dec.get_decimated_poly()
 #### 5. SKELETONIZE/THIN ####
 #############################
 
+def intersect_plane_with_edges(poly, point2):
+    # perform ray casting
+    plane = vtk.vtkPlaneSource()
+    plane.SetOrigin(-20,-20,0)
+    plane.SetPoint1(0,0,100)
+    plane.SetPoint2(point2)
+    plane.SetResolution(1000,1000)
+    plane.Update()
+
+    tri2 = vtk.vtkTriangleFilter()
+    tri2.SetInputData(plane.GetOutput())
+    tri2.Update()
+
+    tri = vtk.vtkTriangleFilter()
+    tri.SetInputData(poly)
+    tri.Update()
+
+    inter = vtk.vtkIntersectionPolyDataFilter()
+    inter.SetInputData(0, tri2.GetOutput())
+    inter.SetInputData(1, tri.GetOutput())
+    inter.Update()
+
+    points = inter.GetOutput()
+
+    return points
+
+
 # get outer edges
 
 featureEdges = vtk.vtkFeatureEdges()
@@ -172,10 +199,60 @@ edge_poly = featureEdges.GetOutput()
 # move edges polydata to the XY plane and in Y positive region
 meshOp.changePolyData(edge_poly)
 edge_poly = meshOp.translate(0,-edge_poly.GetBounds()[2], -edge_poly.GetBounds()[4])
+meshOp.changePolyData(edge_poly)
 x,y,z = meshOp.computeCenterOfMass()
 edge_poly = meshOp.translate(-x,-y,-z)
-my_renderer = renderer.Renderer(poly_data=edge_poly, wire_frame=False)
+meshOp.changePolyData(edge_poly)
+edge_poly = meshOp.translate(0,0, -edge_poly.GetBounds()[4]) #move in the XY plane to meet the line
+meshOp.changePolyData(edge_poly)
+edge_poly = meshOp.translate(0,0,0)
+meshOp.changePolyData(edge_poly)
+
+
+# regenerate the poly with actual points because otherwise it can't detect intersection with a plane
+edge_points = vtk.vtkPoints()
+for i in range(edge_poly.GetNumberOfPoints()):
+    p = edge_poly.GetPoint(i)
+    edge_points.InsertPoint(i, p)
+
+
+edge_poly_new = vtk.vtkPolyData()
+edge_poly_new.SetPoints(edge_points)
+
+my_renderer = renderer.Renderer(poly_data=edge_poly_new, wire_frame=False)
 my_renderer.render()
 
+print intersect_plane_with_edges(edge_poly, [100,100,0])
+
+mapper = vtk.vtkPolyDataMapper()
+mapper.SetInputData(edge_poly)
+
+line = vtk.vtkPlaneSource()
+line.SetOrigin(-20,-20,-20)
+line.SetPoint1(0,0,100)
+line.SetPoint2(100,100,0)
+line.Update()
+line_poly = line.GetOutput()
+
+actor = vtk.vtkActor()
+actor.SetMapper(mapper)
+
+mapper2 = vtk.vtkPolyDataMapper()
+mapper2.SetInputData(line_poly)
+
+actor2 = vtk.vtkActor()
+actor2.SetMapper(mapper2)
+
+renderWindow = vtk.vtkRenderWindow()
+rend = vtk.vtkRenderer()
 
 
+renderWindow.AddRenderer(rend)
+
+rend.AddActor(actor)
+rend.AddActor(actor2)
+rend.ResetCamera()
+renderWindowInteractor = vtk.vtkRenderWindowInteractor()
+renderWindowInteractor.SetRenderWindow(renderWindow)
+renderWindow.Render()
+renderWindowInteractor.Start()
