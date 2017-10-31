@@ -156,6 +156,32 @@ dec_poly_data = dec.get_decimated_poly()
 #### 5. SKELETONIZE/THIN ####
 #############################
 
+def intersect_plane_with_edges(poly, point2):
+    # perform ray casting
+    line = vtk.vtkPlaneSource ()
+    line.SetPoint1(0,0,poly.GetBounds()[4])
+    #line.SetResolution(1000)
+    line.SetPoint2(point2)
+    line.Update()
+
+    tri2 = vtk.vtkTriangleFilter()
+    tri2.SetInputData(line.GetOutput())
+    tri2.Update()
+
+    tri = vtk.vtkTriangleFilter()
+    tri.SetInputData(poly)
+    tri.Update()
+
+    inter = vtk.vtkIntersectionPolyDataFilter()
+    inter.SetInputData(0, line.GetOutput())
+    inter.SetInputData(1, poly)
+    inter.Update()
+
+    points = inter.GetOutput()
+
+    return points
+
+
 # get outer edges
 
 featureEdges = vtk.vtkFeatureEdges()
@@ -174,8 +200,43 @@ meshOp.changePolyData(edge_poly)
 edge_poly = meshOp.translate(0,-edge_poly.GetBounds()[2], -edge_poly.GetBounds()[4])
 x,y,z = meshOp.computeCenterOfMass()
 edge_poly = meshOp.translate(-x,-y,-z)
-my_renderer = renderer.Renderer(poly_data=edge_poly, wire_frame=False)
-my_renderer.render()
+meshOp.changePolyData(edge_poly)
+edge_poly = meshOp.translate(0,0, -edge_poly.GetBounds()[4]) #move in the XY plane to meet the line
+meshOp.changePolyData(edge_poly)
+#my_renderer = renderer.Renderer(poly_data=edge_poly, wire_frame=False)
+#my_renderer.render()
+
+print intersect_plane_with_edges(reorientedPolyData, [0,50,reorientedPolyData.GetBounds()[5]])
+
+mapper = vtk.vtkPolyDataMapper()
+mapper.SetInputData(reorientedPolyData)
+
+line = vtk.vtkPlaneSource()
+line.SetPoint1(0,0,reorientedPolyData.GetBounds()[4])
+line.SetPoint2(0,30,reorientedPolyData.GetBounds()[5])
+#line.SetResolution(1000)
+line.Update()
+line_poly = line.GetOutput()
+
+actor = vtk.vtkActor()
+actor.SetMapper(mapper)
+
+mapper2 = vtk.vtkPolyDataMapper()
+mapper2.SetInputData(line_poly)
+
+actor2 = vtk.vtkActor()
+actor2.SetMapper(mapper2)
+
+renderWindow = vtk.vtkRenderWindow()
+rend = vtk.vtkRenderer()
 
 
+renderWindow.AddRenderer(rend)
 
+rend.AddActor(actor)
+rend.AddActor(actor2)
+rend.ResetCamera()
+renderWindowInteractor = vtk.vtkRenderWindowInteractor()
+renderWindowInteractor.SetRenderWindow(renderWindow)
+renderWindow.Render()
+renderWindowInteractor.Start()
