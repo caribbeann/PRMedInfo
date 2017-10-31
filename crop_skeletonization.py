@@ -230,7 +230,26 @@ connect the points
     
 """
 
-nr = locator.FindCellsAlongLine([0,0,0],[0,50,0],0.001, cells)
+
+line_length = abs(edge_poly.GetBounds()[2]) + max(abs(edge_poly.GetBounds()[0]), abs(edge_poly.GetBounds()[1]))
+start_point = [0,0,0]
+end_points = []
+for angle in np.linspace(math.pi/6, math.pi*5/6, 24): # from 30deg to 150deg in 5 deg steps
+    end_points.append([start_point[0]+line_length*math.cos(angle),start_point[1]+ line_length*math.sin(angle), start_point[2]])
+
+end_points = np.array(end_points)
+
+for i in range(end_points.shape[0]):
+    nr = locator.FindCellsAlongLine(start_point,end_points[i],0.001, cells)
+    pid1 = vtk.vtkIdList() # contains the point ids of the first intersection
+    pid2 = vtk.vtkIdList()
+    if cells.GetNumberOfIds()==2:
+        id1 = cells.GetId(0)
+        id2 = cells.GetId(1)
+        edge_poly.GetCellPoints(id1, pid1)
+        edge_poly.GetCellPoints(id2, pid2)
+
+    print cells
 
 
 
