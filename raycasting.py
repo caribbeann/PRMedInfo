@@ -22,11 +22,6 @@ class RayCasting:
                 pt = self._rayCast(center,[center[0]+length*math.sin(thetaInit+angleStep*i),center[1]+length*math.cos(thetaInit+angleStep*i),center[2]],maxZ)
                 if pt != -1:
                     points.InsertNextPoint(pt)
-                    print (i,pt)
-                else:
-                    print ":(" 
-            else:
-                print i
         return points
 
 
