@@ -40,12 +40,7 @@ meshOp.changePolyData(moved_poly_data)
 #my_renderer.render()
 
 # compute PCA 3 times to align the object main axis with the coordinate system
-# PCADict = meshOp.computePCA()
-# reorientedPolyData = meshOp.rotate([1.0,0.0,0.0],PCADict['eigenvectors'][0])
-# meshOp.changePolyData(reorientedPolyData)
-# moved_poly_data = meshOp.move_to_origin()
-# meshOp.changePolyData(moved_poly_data)
-#
+
 PCADict2 = meshOp.computePCA()
 reorientedPolyData = meshOp.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
 meshOp.changePolyData(reorientedPolyData)
@@ -128,7 +123,7 @@ con_filter = vtk.vtkPolyDataConnectivityFilter()
 
 last_biggest_percentage = 0
 last_crop_poly = None
-for i in np.arange(0.50, 0.9, 0.025):
+for i in np.arange(0.60, 0.95, 0.0125):
     cropped_poly_data = meshOp.cropMesh(dec_poly_data.GetBounds()[0], dec_poly_data.GetBounds()[1],
                                           dec_poly_data.GetBounds()[2], dec_poly_data.GetBounds()[3],
                                         i * dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5])
@@ -157,32 +152,6 @@ dec_poly_data = dec.get_decimated_poly()
 #### 5. SKELETONIZE/THIN ####
 #############################
 
-def intersect_plane_with_edges(poly, point2):
-    # perform ray casting
-    plane = vtk.vtkPlaneSource()
-    plane.SetOrigin(-20,-20,0)
-    plane.SetPoint1(0,0,100)
-    plane.SetPoint2(point2)
-    plane.SetResolution(1000,1000)
-    plane.Update()
-
-    tri2 = vtk.vtkTriangleFilter()
-    tri2.SetInputData(plane.GetOutput())
-    tri2.Update()
-
-    tri = vtk.vtkTriangleFilter()
-    tri.SetInputData(poly)
-    tri.Update()
-
-    inter = vtk.vtkIntersectionPolyDataFilter()
-    inter.SetInputData(0, tri2.GetOutput())
-    inter.SetInputData(1, tri.GetOutput())
-    inter.Update()
-
-    points = inter.GetOutput()
-
-    return points
-
 
 # get outer edges
 
@@ -198,86 +167,157 @@ edge_poly = featureEdges.GetOutput()
 
 
 # move edges polydata to the XY plane and in Y positive region
-meshOp.changePolyData(edge_poly)
-edge_poly = meshOp.translate(0,-edge_poly.GetBounds()[2], -edge_poly.GetBounds()[4])
-meshOp.changePolyData(edge_poly)
-x,y,z = meshOp.computeCenterOfMass()
-edge_poly = meshOp.translate(-x,-y,-z)
-meshOp.changePolyData(edge_poly)
-edge_poly = meshOp.translate(0,0, -edge_poly.GetBounds()[4]) #move in the XY plane to meet the line
-meshOp.changePolyData(edge_poly)
-edge_poly = meshOp.translate(0,0,0)
-meshOp.changePolyData(edge_poly)
+
+def align_mesh(operation, mesh):
+    """
+    Aligns mesh with minimum z bound to the XY plane and minimum y bound to the XZ plane. The Y axis will
+    , at the and, pass through the center of mass of the mesh passed
+    :param operation:
+    :param mesh:
+    :return:
+    """
+    operation.changePolyData(mesh)
+    mesh = operation.translate(0,-mesh.GetBounds()[2], -mesh.GetBounds()[4])
+    operation.changePolyData(mesh)
+    x,y,z = operation.computeCenterOfMass()
+    mesh = operation.translate(-x,-y,-z)
+    operation.changePolyData(mesh)
+    mesh = operation.translate(0,0, -mesh.GetBounds()[4]) #move in the XY plane to meet the line
+    operation.changePolyData(mesh)
+    mesh = operation.translate(0,0,0)
+    operation.changePolyData(mesh)
+    mesh = operation.translate(0,-mesh.GetBounds()[2], 0)
+    operation.changePolyData(mesh)
+
+    return mesh
+
+original_aligned_dec_poly = align_mesh(meshOp, dec_poly_data)
+edge_poly = align_mesh(meshOp, edge_poly)
+original_aligned_poly = align_mesh(meshOp, reorientedPolyData)
+
+
+
 
 
 # get intersection of rays sent from the center of mass outwards
-locator = vtk.vtkCellLocator()
-locator.SetDataSet(edge_poly)
-locator.BuildLocator()
+edge_locator = vtk.vtkCellLocator()
+edge_locator.SetDataSet(edge_poly)
+edge_locator.BuildLocator()
 
-cells = vtk.vtkIdList()
-
-"""
-create line set
-
-for each line:
-    get 2 cells that are intersected
-    get 2 points between the 4 ends of the celss
-    get middle point between the 2 points
-    add it to a point cloud
-
-connect the points
-    
-"""
+cells_edges = vtk.vtkIdList()
 
 
-line_length = abs(edge_poly.GetBounds()[2]) + max(abs(edge_poly.GetBounds()[0]), abs(edge_poly.GetBounds()[1]))
+line_length = abs(edge_poly.GetBounds()[3]) + abs(edge_poly.GetBounds()[1])
 start_point = [0,0,0]
 end_points = []
-for angle in np.linspace(math.pi/6, math.pi*5/6, 24): # from 30deg to 150deg in 5 deg steps
-    end_points.append([start_point[0]+line_length*math.cos(angle),start_point[1]+ line_length*math.sin(angle), start_point[2]])
+for angle in np.linspace(math.pi/6, math.pi*5/6, 120): # from 30deg to 150deg in 1 deg steps
+    end_points.append([start_point[0]+line_length*math.cos(angle),start_point[1]+ line_length*math.sin(angle),
+                       start_point[2]])
 
 end_points = np.array(end_points)
 
+skeleton_points = vtk.vtkPoints() # here we add the points that we find
+whole_line = vtk.vtkCellArray()
+poly_line = vtk.vtkPolyLine()
+
+alv_line_points = []
+poly_line.GetPointIds().SetNumberOfIds(end_points.shape[0])
+counter = 0
 for i in range(end_points.shape[0]):
-    nr = locator.FindCellsAlongLine(start_point,end_points[i],0.001, cells)
+
+    nr = edge_locator.FindCellsAlongLine(start_point,end_points[i],0.001, cells_edges)
     pid1 = vtk.vtkIdList() # contains the point ids of the first intersection
     pid2 = vtk.vtkIdList()
-    if cells.GetNumberOfIds()==2:
-        id1 = cells.GetId(0)
-        id2 = cells.GetId(1)
+    if cells_edges.GetNumberOfIds()== 2:
+        # get only the first two intersection points
+        id1 = cells_edges.GetId(0)
+        id2 = cells_edges.GetId(1)
         edge_poly.GetCellPoints(id1, pid1)
         edge_poly.GetCellPoints(id2, pid2)
 
-    print cells
+        p_int_1 = np.add(np.array(edge_poly.GetPoint(pid1.GetId(0))),np.array(edge_poly.GetPoint(pid1.GetId(1)))) /2
+        p_int_2 = np.add(np.array(edge_poly.GetPoint(pid2.GetId(0))),np.array(edge_poly.GetPoint(pid2.GetId(1)))) /2
+
+        p_alv_line = np.add(p_int_1, p_int_2)/2
+        alv_line_points.append(p_alv_line)
+        skeleton_points.InsertNextPoint(p_alv_line)
+
+        poly_line.GetPointIds().SetId(counter, counter)
+        counter += 1
+poly_line.GetPointIds().SetNumberOfIds(counter-1)
+whole_line.InsertNextCell(poly_line)
+
+skeleton = vtk.vtkPolyData()
+skeleton.SetPoints(skeleton_points)
+skeleton.SetLines(whole_line)
 
 
+# find intersection of vertical lines with the original aligned mesh
 
-#rend=renderer.Renderer(poly_data=poly, wire_frame=False)
+original_locator = vtk.vtkOBBTree()
+original_locator.SetDataSet(original_aligned_poly)
+original_locator.BuildLocator()
+
+cells_original = vtk.vtkIdList()
+
+line_length = abs(original_aligned_poly.GetBounds()[5]) + 1
+
+skeleton_points_final = vtk.vtkPoints() # here we add the points that we find
+intersection_points = vtk.vtkPoints()
+intersection_cells = vtk.vtkIdList()
+whole_line_final = vtk.vtkCellArray()
+poly_line_final = vtk.vtkPolyLine()
+poly_line_final.GetPointIds().SetNumberOfIds(len(alv_line_points))
+counter = 0
+for alv_line_point in alv_line_points:
+    nr = original_locator.IntersectWithLine(alv_line_point,
+                                         [alv_line_point[0], alv_line_point[1], alv_line_point[2]+line_length],
+                                            intersection_points,
+                                        intersection_cells)
+
+    if intersection_points.GetNumberOfPoints()>=1:
+
+        p_int = intersection_points.GetPoint(intersection_points.GetNumberOfPoints()-1)
+
+        pid = skeleton_points_final.InsertNextPoint(p_int)
+        poly_line_final.GetPointIds().SetId(counter, pid)
+
+        counter +=1
+
+poly_line_final.GetPointIds().SetNumberOfIds(counter-1)
+whole_line_final.InsertNextCell(poly_line_final)
+
+skeleton_final = vtk.vtkPolyData()
+skeleton_final.SetPoints(skeleton_points_final)
+skeleton_final.SetLines(whole_line_final)
+
+
+###############################
+### 6. visualize everything ###
+###############################
+
+#rend=renderer.Renderer(poly_data=edge_poly, wire_frame=False)
 #rend.render()
 
 
 #print intersect_plane_with_edges(poly, [100,100,0])
 
 mapper = vtk.vtkPolyDataMapper()
-mapper.SetInputData(edge_poly)
+mapper.SetInputData(original_aligned_poly)
 
 line = vtk.vtkLineSource()
 
-line.SetPoint1(0,0,0)
-line.SetPoint2(0,50,0)
-line.Update()
-line_poly = line.GetOutput()
 
 actor = vtk.vtkActor()
 actor.SetMapper(mapper)
 
 mapper2 = vtk.vtkPolyDataMapper()
-mapper2.SetInputData(line_poly)
+mapper2.SetInputData(skeleton_final)
 
 actor2 = vtk.vtkActor()
 actor2.SetMapper(mapper2)
-
+actor2.GetProperty().SetColor(0.5, 0.5, 1.0)
+actor2.GetProperty().SetLineWidth(5)
 renderWindow = vtk.vtkRenderWindow()
 rend = vtk.vtkRenderer()
 
