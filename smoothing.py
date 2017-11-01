@@ -1,5 +1,6 @@
 import vtk
 import numpy as np
+import vtkpointcloud
 
 class Smoothing:
     def __init__(self, *args, **kwargs):
@@ -34,3 +35,52 @@ class Smoothing:
         for j in range (0,nbIter):
             self.putPointsCloser(npPoints,threshold)#[idBiggestComponent:idEndDisc],np.mean(vals))
         return npPoints 
+
+    def polyDataSmoothed(self,nbIter,threshold):
+        bounds = self.poly_data.GetBounds()
+        pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
+        npPoints = self.smooth(nbIter,threshold)
+        for i in range (0,self.poly_data.GetNumberOfPoints()):
+            pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
+            pointCloud.addPoint(pt)
+        return pointCloud.vtkPolyData
+
+    def weightedCombination(self,nbIter,threshold):
+        vmaths = vtk.vtkMath()
+        bounds = self.poly_data.GetBounds()
+        pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
+        npPoints = self.smooth(nbIter,threshold)
+        dists = np.zeros(self.poly_data.GetNumberOfPoints())
+        for i in range (0,self.poly_data.GetNumberOfPoints()):
+            pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
+            firstPt = self.poly_data.GetPoint(i)
+            dists[i] = vmaths.Distance2BetweenPoints(pt,firstPt)
+            if dists[i]>1:
+                moy = [pt[0]+(firstPt[0]-pt[0])/dists[i], pt[1]+(firstPt[1]-pt[1])/dists[i] ,pt[2]]
+                pointCloud.addPoint(moy)
+            else:   
+                moy = [pt[0]+(firstPt[0]-pt[0])/2, pt[1]+(firstPt[1]-pt[1])/2 ,pt[2]] 
+                pointCloud.addPoint(moy)
+
+        return pointCloud.vtkPolyData     
+
+    def meanWeightedCombination(self,nbIter,threshold):
+        vmaths = vtk.vtkMath()
+        bounds = self.poly_data.GetBounds()
+        pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
+        npPoints = self.smooth(nbIter,threshold)
+        dists = np.zeros(self.poly_data.GetNumberOfPoints())
+        for i in range (0,firstTest.GetNumberOfPoints()):
+            pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
+            firstPt = self.poly_data.GetPoint(i)
+            dists[i] = vmaths.Distance2BetweenPoints(pt,firstPt)
+            if dists[i]<2:
+                moy = [pt[0]+(firstPt[0]-pt[0])/2, pt[1]+(firstPt[1]-pt[1])/2 ,pt[2]]
+                pointCloud.addPoint(moy)
+            else:   
+                pointCloud.addPoint(pt)
+        return pointCloud.vtkPolyData     
+
+    def changePolyData(self,polydata):
+        self.poly_data = polydata            
+

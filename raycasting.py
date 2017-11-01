@@ -8,6 +8,7 @@ class RayCasting:
         tri.SetInputData(self.poly_data)
         tri.Update()
         self.tripoly = tri.GetOutput()
+        self.bounds = self.poly_data.GetBounds()
 
     def findPoints(self,center,maxZ):
         vmaths = vtk.vtkMath()
@@ -23,6 +24,56 @@ class RayCasting:
                 if pt != -1:
                     points.InsertNextPoint(pt)
         return points
+
+    def findPoints2(self,line,maxZ,windowSize):
+        vmaths = vtk.vtkMath()
+        points = vtk.vtkPoints()
+        bounds = self.poly_data.GetBounds()
+        windowVal = windowSize/2
+        
+        for i in range (0,line.GetNumberOfPoints()-1):
+            currentPt = line.GetPoint(i)
+            nextPt = line.GetPoint(i+1)
+            currentLine = [currentPt[0]-nextPt[0],currentPt[1]-nextPt[1]]
+            normal = [currentLine[1],-currentLine[0],0]
+            norm = vmaths.Norm(normal)
+            normal[0]=normal[0]/norm
+            normal[1]=normal[1]/norm
+            center = [currentPt[0],currentPt[1],bounds[5]]
+            pt1 = [currentPt[0]+windowSize*normal[0],currentPt[1]+windowSize*normal[1],bounds[5]]
+            pt = self._rayCast(center,pt1,maxZ)
+            if pt != -1:
+                points.InsertNextPoint(pt)
+            else:
+                print ":'("    
+        return points  
+
+    # def goUpward(self,line):
+    #     points = vtk.vtkPoints()
+    #     for i in range (0,line.GetNumberOfPoints()):
+    #         currentPt = line.GetPoint(i)
+    #         pt1 = [currentPt[0],currentPt[1],self.bounds[4]]
+    #         lineSrc = vtk.vtkLineSource()
+    #         lineSrc.SetPoint1(pt1)
+    #         pt2 = [currentPt[0],currentPt[1],self.bounds[5]]
+    #         lineSrc.SetPoint2(pt2) 
+    #         lineSrc.Update()
+
+    #         tri2 = vtk.vtkTriangleFilter()
+    #         tri2.SetInputConnection(lineSrc.GetOutputPort())
+    #         tri2.Update()
+
+    #         inter = vtk.vtkIntersectionPolyDataFilter()
+    #         inter.SetInputData(0,self.tripoly)
+    #         inter.SetInputData(1,tri2.GetOutput())
+    #         inter.Update()
+
+    #         if inter.GetOutput().GetNumberOfPoints()!=0:
+    #             points.InsertNextPoint(inter.GetOutput().GetPoint(0))
+    #         else:
+    #             print ":'("
+    #     return points            
+
 
 
     def _rayCast(self,center,point1,maxZ):
