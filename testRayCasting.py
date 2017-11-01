@@ -5,7 +5,6 @@ import renderer
 import math
 import decimator
 import raycasting
-import levelset
 import vtkpointcloud
 
 # Create polydata to slice the grid with. In this case, use a cone. This could
