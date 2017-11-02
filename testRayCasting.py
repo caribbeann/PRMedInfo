@@ -32,7 +32,7 @@ meshOps = meshOperations.MeshOperations(poly_data=polydata)
 gravity = meshOps.computeCenterOfMass()
 
 bounds = polydata.GetBounds()
-polydata = meshOps.cropMesh(bounds[0],bounds[1],bounds[2],bounds[3],bounds[4],gravity[2])
+polydata = meshOps.cropMesh(bounds[0],bounds[1],bounds[2],bounds[3],bounds[4],gravity[2])#gravity[2],bounds[5])
 
 meshOps.changePolyData(polydata)
 gravity = meshOps.computeCenterOfMass()

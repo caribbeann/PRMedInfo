@@ -52,13 +52,13 @@ suggest = meshOp2.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
 meshOp2.changePolyData(suggest)
 suggest = meshOp2.translate(translation[0],translation[1],translation[2])
 
-meshOp.changePolyData(polydata)
-gravity = meshOp.computeCenterOfMass()
+# meshOp.changePolyData(polydata)
+# gravity = meshOp.computeCenterOfMass()
 
-bounds = polydata.GetBounds()
+# bounds = polydata.GetBounds()
 
-meshOp.changePolyData(polydata)
-gravity = meshOp.computeCenterOfMass()
+# meshOp.changePolyData(polydata)
+# gravity = meshOp.computeCenterOfMass()
 
 
 

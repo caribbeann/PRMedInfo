@@ -19,10 +19,9 @@ class RayCasting:
         angleStep = vmaths.RadiansFromDegrees(1.0)
         length = bounds[3]-bounds[2]-(bounds[3]-center[1])/2
         for i in range (0,300):
-            if i!=127 and i!=128:
-                pt = self._rayCast(center,[center[0]+length*math.sin(thetaInit+angleStep*i),center[1]+length*math.cos(thetaInit+angleStep*i),center[2]],maxZ)
-                if pt != -1:
-                    points.InsertNextPoint(pt)
+            pt = self._rayCast(center,[center[0]+length*math.sin(thetaInit+angleStep*i),center[1]+length*math.cos(thetaInit+angleStep*i),center[2]],maxZ)
+            if pt != -1:
+                points.InsertNextPoint(pt)
         return points
 
     def findPoints2(self,line,maxZ,windowSize):
@@ -92,6 +91,8 @@ class RayCasting:
         inter = vtk.vtkIntersectionPolyDataFilter()
         inter.SetInputData(0,self.tripoly)
         inter.SetInputData(1,tri2.GetOutput())
+        inter.SetSplitFirstOutput(0)
+        inter.SetSplitSecondOutput(0)
         inter.Update()
 
         vmaths = vtk.vtkMath()

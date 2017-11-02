@@ -127,40 +127,40 @@ class MeshOperations:
 
     # crop the mesh, keep what is inside the box
     def cropMesh(self,xmin,xmax,ymin,ymax,zmin,zmax):
-        cube = vtk.vtkCubeSource()
-        cube.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
-        cube.Update()
+        # cube = vtk.vtkCubeSource()
+        # cube.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+        # cube.Update()
 
-        tri2 = vtk.vtkTriangleFilter()
-        tri2.SetInputData(cube.GetOutput())
-        tri2.Update()
+        # tri2 = vtk.vtkTriangleFilter()
+        # tri2.SetInputData(cube.GetOutput())
+        # tri2.Update()
 
-        tri = vtk.vtkTriangleFilter()
-        tri.SetInputData(self.poly_data)
-        tri.Update()
+        # tri = vtk.vtkTriangleFilter()
+        # tri.SetInputData(self.poly_data)
+        # tri.Update()
 
-        inter = vtk.vtkIntersectionPolyDataFilter()
-        inter.SetInputData(0,tri.GetOutput())
-        inter.SetInputData(1,tri2.GetOutput())
-        inter.Update()
+        # inter = vtk.vtkIntersectionPolyDataFilter()
+        # inter.SetInputData(0,tri.GetOutput())
+        # inter.SetInputData(1,tri2.GetOutput())
+        # inter.Update()
 
-        return inter.GetOutput()
-
-
-        # box = vtk.vtkBox()
-        # box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+        # return inter.GetOutput()
 
 
-        # pdNormals = vtk.vtkPolyDataNormals()
-        # pdNormals.SetInputData(self.poly_data)
+        box = vtk.vtkBox()
+        box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
 
-        # clipper = vtk.vtkClipPolyData()
-        # clipper.SetInputConnection(pdNormals.GetOutputPort())
-        # clipper.SetClipFunction(box)
-        # clipper.GenerateClippedOutputOn()
-        # clipper.InsideOutOff()
-        # clipper.Update()
-        # return clipper.GetClippedOutput()
+
+        pdNormals = vtk.vtkPolyDataNormals()
+        pdNormals.SetInputData(self.poly_data)
+
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputConnection(pdNormals.GetOutputPort())
+        clipper.SetClipFunction(box)
+        clipper.GenerateClippedOutputOn()
+        clipper.InsideOutOff()
+        clipper.Update()
+        return clipper.GetClippedOutput()
 
     def meshTo3DImg(self):
         whiteImage = vtk.vtkImageData()
