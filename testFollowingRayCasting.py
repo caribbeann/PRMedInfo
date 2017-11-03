@@ -70,6 +70,9 @@ suggest = meshOp.translate(-x,-y,-z)
 
 
 
+
+
+
 ################## Part 2 : Smoothing ########################
 
 ### The computed polyline is very noisy, there is a need to smooth it
@@ -79,10 +82,12 @@ suggest = meshOp.translate(-x,-y,-z)
 ### These new positions might be a bit noisy, they will be smoothed again
 
 # Smooth and weight smoothed with firstTest, then smooth again and find points on mesh
-smth = smoothing.Smoothing(poly_data=rays)
-rays = smth.weightedCombination(200,0.1) #smoothing + weighting smoothing with firstTest
-smth.changePolyData(rays)
-alv_line_points = smth.smooth(50,0.1) #smooth again (but less) => points are NOT on the mesh but have right curve
+smth = smoothing.Smoothing()
+rays = smth.weightedCombination(rays,200,0.1) #smoothing + weighting smoothing with firstTest
+alv_line_points = smth.smooth(rays,50,0.1) #smooth again (but less) => points are NOT on the mesh but have right curve
+
+
+
 
 
 ################## Part 3 : Postprocessing ########################

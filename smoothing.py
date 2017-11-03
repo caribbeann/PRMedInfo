@@ -2,13 +2,10 @@ import vtk
 import numpy as np
 import vtkpointcloud
 
+
 class Smoothing:
     def __init__(self, *args, **kwargs):
         self.poly_data = kwargs.get("poly_data")
-        tri = vtk.vtkTriangleFilter()
-        tri.SetInputData(self.poly_data)
-        tri.Update()
-        self.tripoly = tri.GetOutput()
 
     def distPt(self,pt1,pt2):
         pt12 = pt1-pt2
@@ -29,33 +26,33 @@ class Smoothing:
                 pts[i]=newPt1
                 pts[i+1]=newPt2     
 
-    def smooth(self,nbIter,threshold):
-        npPoints = np.zeros(shape=(self.poly_data.GetNumberOfPoints(),3))
-        npPoints[0]=self.poly_data.GetPoint(0)
-        for i in range (0,self.poly_data.GetNumberOfPoints()-1):
-            npPoints[i+1]=self.poly_data.GetPoint(i+1)
+    def smooth(self,polydata,nbIter,threshold):
+        npPoints = np.zeros(shape=(polydata.GetNumberOfPoints(),3))
+        npPoints[0]=polydata.GetPoint(0)
+        for i in range (0,polydata.GetNumberOfPoints()-1):
+            npPoints[i+1]=polydata.GetPoint(i+1)
         for j in range (0,nbIter):
-            self.putPointsCloser(npPoints,threshold)#[idBiggestComponent:idEndDisc],np.mean(vals))
+            self.putPointsCloser(npPoints,threshold)
         return npPoints 
 
-    def polyDataSmoothed(self,nbIter,threshold):
+    def polyDataSmoothed(self,polydata,nbIter,threshold):
         bounds = self.poly_data.GetBounds()
         pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
-        npPoints = self.smooth(nbIter,threshold)
-        for i in range (0,self.poly_data.GetNumberOfPoints()):
+        npPoints = self.smooth(polydata,nbIter,threshold)
+        for i in range (0,polydata.GetNumberOfPoints()):
             pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
             pointCloud.addPoint(pt)
         return pointCloud.vtkPolyData
 
-    def weightedCombination(self,nbIter,threshold):
+    def weightedCombination(self,polydata,nbIter,threshold):
         vmaths = vtk.vtkMath()
-        bounds = self.poly_data.GetBounds()
+        bounds = polydata.GetBounds()
         pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
-        npPoints = self.smooth(nbIter,threshold)
-        dists = np.zeros(self.poly_data.GetNumberOfPoints())
-        for i in range (0,self.poly_data.GetNumberOfPoints()):
+        npPoints = self.smooth(polydata,nbIter,threshold)
+        dists = np.zeros(polydata.GetNumberOfPoints())
+        for i in range (0,polydata.GetNumberOfPoints()):
             pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
-            firstPt = self.poly_data.GetPoint(i)
+            firstPt = polydata.GetPoint(i)
             dists[i] = vmaths.Distance2BetweenPoints(pt,firstPt)
             if dists[i]>1:
                 moy = [pt[0]+(firstPt[0]-pt[0])/dists[i], pt[1]+(firstPt[1]-pt[1])/dists[i] ,pt[2]]
@@ -65,23 +62,20 @@ class Smoothing:
                 pointCloud.addPoint(moy)
         return pointCloud.vtkPolyData     
 
-    def meanWeightedCombination(self,nbIter,threshold):
+    def meanWeightedCombination(self,polydata,nbIter,threshold):
         vmaths = vtk.vtkMath()
-        bounds = self.poly_data.GetBounds()
+        bounds = polydata.GetBounds()
         pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
-        npPoints = self.smooth(nbIter,threshold)
-        dists = np.zeros(self.poly_data.GetNumberOfPoints())
+        npPoints = self.smooth(polydata,nbIter,threshold)
+        dists = np.zeros(polydata.GetNumberOfPoints())
         for i in range (0,firstTest.GetNumberOfPoints()):
             pt = [npPoints[i,0],npPoints[i,1],npPoints[i,2]]
-            firstPt = self.poly_data.GetPoint(i)
+            firstPt = polydata.GetPoint(i)
             dists[i] = vmaths.Distance2BetweenPoints(pt,firstPt)
             if dists[i]<2:
                 moy = [pt[0]+(firstPt[0]-pt[0])/2, pt[1]+(firstPt[1]-pt[1])/2 ,pt[2]]
                 pointCloud.addPoint(moy)
             else:   
                 pointCloud.addPoint(pt)
-        return pointCloud.vtkPolyData     
-
-    def changePolyData(self,polydata):
-        self.poly_data = polydata            
+        return pointCloud.vtkPolyData              
 
