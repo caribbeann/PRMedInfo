@@ -15,7 +15,7 @@ import math
 
 reader = vtk.vtkOBJReader()
 
-reader.SetFileName("upperJawMesh.obj")
+reader.SetFileName("lowerJawMesh.obj")
 
 reader.Update()
 
@@ -23,7 +23,7 @@ polydata = reader.GetOutput()
 
 reader2 = vtk.vtkOBJReader()
 
-reader2.SetFileName("suggest_alveolarRidgeLine_upper_finalVisualization.obj")
+reader2.SetFileName("suggest_alveolarRidgeLine_lower_finalVisualization.obj")
 
 reader2.Update()
 
@@ -38,8 +38,8 @@ meshOp = meshOperations.MeshOperations(poly_data=polydata)
 
 # move center of gravity of the object to origin - do this every time something changes
 x, y, z = meshOp.computeCenterOfMass()
-moved_poly_data = meshOp.move_to_origin()
-meshOp.changePolyData(moved_poly_data)
+#moved_poly_data = meshOp.move_to_origin()
+#meshOp.changePolyData(moved_poly_data)
 
 
 #my_renderer = renderer.Renderer(poly_data=moved_poly_data, wire_frame=False)
@@ -51,36 +51,36 @@ PCADict2 = meshOp.computePCA()
 reorientedPolyData = meshOp.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
 meshOp.changePolyData(reorientedPolyData)
 x1, y1, z1 = meshOp.computeCenterOfMass()
-moved_poly_data = meshOp.move_to_origin()
-meshOp.changePolyData(moved_poly_data)
+#moved_poly_data = meshOp.move_to_origin()
+#meshOp.changePolyData(moved_poly_data)
 
 
 PCADict3 = meshOp.computePCA()
 reorientedPolyData = meshOp.rotate([0.0,0.0,1.0],PCADict3['eigenvectors'][2])
 meshOp.changePolyData(reorientedPolyData)
 x2, y2, z2 = meshOp.computeCenterOfMass()
-moved_poly_data = meshOp.move_to_origin()
-meshOp.changePolyData(moved_poly_data)
+#moved_poly_data = meshOp.move_to_origin()
+#meshOp.changePolyData(moved_poly_data)
 
 
 #move also suggestion
 meshOp.changePolyData(suggest)
-suggest = meshOp.translate(-x,-y,-z)
+#suggest = meshOp.translate(-x,-y,-z)
 suggest = meshOp.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
 
 meshOp.changePolyData(suggest)
-suggest = meshOp.translate(-x1,-y1,-z1)
+#suggest = meshOp.translate(-x1,-y1,-z1)
 meshOp.changePolyData(suggest)
 suggest = meshOp.rotate([0.0,0.0,1.0],PCADict3['eigenvectors'][2])
 meshOp.changePolyData(suggest)
-suggest = meshOp.translate(-x2,-y2,-z2)
+#suggest = meshOp.translate(-x2,-y2,-z2)
 
 # my_renderer = renderer.Renderer(poly_data=suggest, wire_frame=False)
 # my_renderer.render()
 
 # find out where are the teeth and align
 
-reorientedPolyData = moved_poly_data
+#reorientedPolyData = moved_poly_data
 meshOp.changePolyData(reorientedPolyData)
 
 
@@ -117,10 +117,14 @@ meshOp.changePolyData(reorientedPolyData)
 
 # move object to origin of Z
 meshOp.changePolyData(reorientedPolyData)
-reorientedPolyData = meshOp.translate(0,0,-reorientedPolyData.GetBounds()[4])
+x, y, z = meshOp.computeCenterOfMass()
+z = reorientedPolyData.GetBounds()[4]
+#reorientedPolyData = meshOp.translate(0,0,tr)
+reorientedPolyData = meshOp.translate(-x,-y,-z)
 
-#my_renderer = renderer.Renderer(poly_data=reorientedPolyData, wire_frame=False)
-#my_renderer.render()
+
+meshOp.changePolyData(suggest)
+suggest = meshOp.translate(-x,-y,-z)
 
 
 
@@ -401,8 +405,7 @@ else:
     imgMapper.SetInputData(skeleton_final)
     imgMapper2.SetInputData(suggest)
 
-my_renderer = renderer.Renderer(poly_data=suggest, wire_frame=False)
-my_renderer.render()    
+    
 
 inputActor = vtk.vtkActor()
 inputActor.SetMapper(inputMapper)
