@@ -14,13 +14,13 @@ class RayCasting:
         vmaths = vtk.vtkMath()
         points = vtk.vtkPoints()
         bounds = self.poly_data.GetBounds()
-        firstCorner = [bounds[0],bounds[3],center[2]]
-        thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0]-center[0],bounds[3]-center[1],0.0])
-        angleStep = vmaths.RadiansFromDegrees(1.0)
-        length = bounds[3]-bounds[2]-(bounds[3]-center[1])/2
-        for i in range (0,300):
+        firstCorner = [bounds[0],bounds[2],center[2]]
+        #thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0],bounds[2],0.0])
+        angleStep = vmaths.RadiansFromDegrees(-1.0)
+        length = bounds[3]/2-bounds[2]
+        for i in range (0,360):
             print i
-            pt = self._rayCast(center,[center[0]+length*math.sin(thetaInit+angleStep*i),center[1]+length*math.cos(thetaInit+angleStep*i),center[2]],maxZ)
+            pt = self._rayCast(center,[-length*math.sin(angleStep*i),-length*math.cos(angleStep*i),center[2]],maxZ)
             if pt != -1:
                 points.InsertNextPoint(pt)
         return points

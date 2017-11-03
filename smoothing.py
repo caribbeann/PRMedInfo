@@ -27,10 +27,7 @@ class Smoothing:
                 newPt1 = pt1+pt12
                 newPt2 = pt2-pt12
                 pts[i]=newPt1
-                pts[i+1]=newPt2
-        print "---------"
-        print np.mean(dists)
-        print np.max(dists)        
+                pts[i+1]=newPt2     
 
     def smooth(self,nbIter,threshold):
         npPoints = np.zeros(shape=(self.poly_data.GetNumberOfPoints(),3))

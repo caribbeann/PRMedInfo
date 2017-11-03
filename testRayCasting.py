@@ -1,55 +1,97 @@
 import vtk
-import numpy as np
 import meshOperations
 import renderer
-import math
-import decimator
 import raycasting
 import vtkpointcloud
 
-# Create polydata to slice the grid with. In this case, use a cone. This could
-# be any polydata including a stl file.
+
+
+################## Part 1 : Preprocessing ########################
+
+### Load data, find principal components and reorient the data according to these principal components axes
+### The first component will be the x axis and corresponds to the left-right axis
+### The second component will be the y axis and corresponds to the anteroposterior axis
+### The last component will be the z axis and corresponds to the craniocauda axis
+### Then crop the mesh to get rid of the tongue/palatin, to ease the computation
+
+# Load data
 reader = vtk.vtkOBJReader()
-
 reader.SetFileName("lowerJawMesh.obj")
-
 reader.Update()
-
 polydata = reader.GetOutput()
 
-#Preprocessing : rotate data and find center of gravity
+# Reorient data
 meshOp = meshOperations.MeshOperations(poly_data=polydata)
 PCADict = meshOp.computePCA()
-reorientedPolyData = meshOp.rotate([1.0,0.0,0.0],PCADict['eigenvectors'][0])
-meshOp2 = meshOperations.MeshOperations(poly_data=reorientedPolyData)
-PCADict2 = meshOp2.computePCA()
-reorientedPolyData = meshOp2.rotate([0.0,1.0,0.0],PCADict2['eigenvectors'][1])
+reorientedPolyData = meshOp.rotate([0.0,1.0,0.0],PCADict['eigenvectors'][1])
+meshOp.changePolyData(reorientedPolyData)
+PCADict2 = meshOp.computePCA()
+reorientedPolyData = meshOp.rotate([0.0,0.0,1.0],PCADict2['eigenvectors'][2])
 print reorientedPolyData.GetBounds()
-meshOps = meshOperations.MeshOperations(poly_data=reorientedPolyData)
-polydata = meshOps.translate(-reorientedPolyData.GetBounds()[0],-reorientedPolyData.GetBounds()[2],-reorientedPolyData.GetBounds()[4])
+meshOp.changePolyData(reorientedPolyData)
+bounds = reorientedPolyData.GetBounds()
+polydata = meshOp.translate(-bounds[0],-bounds[2],-bounds[4])
 
-meshOps = meshOperations.MeshOperations(poly_data=polydata)
-gravity = meshOps.computeCenterOfMass()
+meshOp.changePolyData(polydata)
+gravity = meshOp.computeCenterOfMass()
 
+# Crop upper part (the center of gravity should be under the teeth hopefully)
 bounds = polydata.GetBounds()
-polydata = meshOps.cropMesh(bounds[0],bounds[1],bounds[2],bounds[3],bounds[4],gravity[2])#gravity[2],bounds[5])
+polydata = meshOp.cropMesh(bounds[0],bounds[1],bounds[2],bounds[3],gravity[2],bounds[5])
 
-meshOps.changePolyData(polydata)
-gravity = meshOps.computeCenterOfMass()
+meshOp.changePolyData(polydata)
+polydata = meshOp.move_to_origin()
+
+# Compute center of gravity
+meshOp.changePolyData(polydata)
+gravity = meshOp.computeCenterOfMass()
+bounds = polydata.GetBounds()
 
 
-#Ray casting part
-rayC = raycasting.RayCasting(poly_data=polydata)
+
+#################### Part 2 : "Ray casting" ########################
+
+### This part throws rays (planes to be exact) from the the center of gravity every degree around the z axis
+### The planes will intersect with the polydata on some points, and for each plane the point with the highest z is computed
+### All points with highest z components are returned by findPoints
+
 center = [gravity[0],gravity[1],bounds[5]]
-points = rayC.findPoints(center,False)
+rayC = raycasting.RayCasting(poly_data=polydata)
+points = rayC.findPoints(center,True)
 
-#Add found points into a pointcloud => vtkpolydata
-pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
+
+#################### Part 3 : Postprocessing ########################
+
+# Put found points into a vtkpolydata structure
+skeleton_points_final = vtk.vtkPoints() # here we add the points that we find
+intersection_points = vtk.vtkPoints()
+intersection_cells = vtk.vtkIdList()
+whole_line_final = vtk.vtkCellArray()
+poly_line_final = vtk.vtkPolyLine()
+poly_line_final.GetPointIds().SetNumberOfIds(points.GetNumberOfPoints())
+counter = 0
 for i in range (0,points.GetNumberOfPoints()):
-	pointCloud.addPoint(points.GetPoint(i))
+    pid = skeleton_points_final.InsertNextPoint(points.GetPoint(i))
+    poly_line_final.GetPointIds().SetId(counter, pid)
+
+    counter +=1
+
+poly_line_final.GetPointIds().SetNumberOfIds(counter-1)
+whole_line_final.InsertNextCell(poly_line_final)
+
+skeleton_final = vtk.vtkPolyData()
+skeleton_final.SetPoints(skeleton_points_final)
+skeleton_final.SetLines(whole_line_final)
 
 
-#Visualization stuff
+# writer = vtk.vtkPolyDataWriter()
+# writer.SetFileName("./rayCastLower360.vtk")
+# writer.SetInputData(skeleton_final)
+# writer.Write()
+
+
+
+#################### Part 4 : Visualization ########################
 inputMapper = vtk.vtkDataSetMapper()
 planeMapper = vtk.vtkDataSetMapper()
 if vtk.VTK_MAJOR_VERSION <= 5:
@@ -60,9 +102,9 @@ else:
 imgMapper = vtk.vtkDataSetMapper()
 
 if vtk.VTK_MAJOR_VERSION <= 5:
-    imgMapper.SetInput(pointCloud.vtkPolyData)
+    imgMapper.SetInput(skeleton_final)
 else:
-    imgMapper.SetInputData(pointCloud.vtkPolyData)
+    imgMapper.SetInputData(skeleton_final)
 
 inputActor = vtk.vtkActor()
 inputActor.SetMapper(inputMapper)
