@@ -19,6 +19,7 @@ class RayCasting:
         angleStep = vmaths.RadiansFromDegrees(1.0)
         length = bounds[3]-bounds[2]-(bounds[3]-center[1])/2
         for i in range (0,300):
+            print i
             pt = self._rayCast(center,[center[0]+length*math.sin(thetaInit+angleStep*i),center[1]+length*math.cos(thetaInit+angleStep*i),center[2]],maxZ)
             if pt != -1:
                 points.InsertNextPoint(pt)
@@ -43,6 +44,7 @@ class RayCasting:
             pt = self._rayCast(center,pt1,maxZ)
             if pt != -1:
                 points.InsertNextPoint(pt)
+                print i
             else:
                 print ":'("    
         return points  
@@ -104,14 +106,14 @@ class RayCasting:
         # find the min or max height points among the found points
         idMinMax = 0
         if maxZ==True: #maximize Z
-            valMax = points.GetPoint(0)
+            valMax = points.GetPoint(0)[2]
             for i in range (0, points.GetNumberOfPoints()):
                 p = points.GetPoint(i)
                 if p[2]>valMax:
                     valMax = p[2]
                     idMinMax = i
         else :
-            valMin = points.GetPoint(0) 
+            valMin = points.GetPoint(0)[2]
             for i in range (0, points.GetNumberOfPoints()):
                 p = points.GetPoint(i)
                 if p[2]<valMin:

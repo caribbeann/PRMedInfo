@@ -12,13 +12,13 @@ import smoothing
 # be any polydata including a stl file.
 reader = vtk.vtkOBJReader()
 
-reader.SetFileName("lowerJawMesh.obj")
+reader.SetFileName("upperJawMesh.obj")
 
 reader.Update()
 
 reader2 = vtk.vtkOBJReader()
 
-reader2.SetFileName("suggest_alveolarRidgeLine_lower_finalVisualization.obj")
+reader2.SetFileName("suggest_alveolarRidgeLine_upper_finalVisualization.obj")
 
 reader2.Update()
 
@@ -55,7 +55,7 @@ suggest = meshOp2.translate(translation[0],translation[1],translation[2])
 # meshOp.changePolyData(polydata)
 # gravity = meshOp.computeCenterOfMass()
 
-# bounds = polydata.GetBounds()
+bounds = polydata.GetBounds()
 
 # meshOp.changePolyData(polydata)
 # gravity = meshOp.computeCenterOfMass()
@@ -66,7 +66,7 @@ suggest = meshOp2.translate(translation[0],translation[1],translation[2])
 
 #Open found points
 reader3 = vtk.vtkPolyDataReader()
-reader3.SetFileName("./FirstTest.vtk")
+reader3.SetFileName("./FirstTestUpper.vtk")
 reader3.Update()
 
 firstTest = reader3.GetOutput()
@@ -77,16 +77,15 @@ firstTest = reader3.GetOutput()
 
 # Smooth and weight smoothed with firstTest, then smooth again and find points on mesh
 smth = smoothing.Smoothing(poly_data=firstTest)
-firstTest = smth.weightedCombination(500,0.2) #smoothing + weighting smoothing with firstTest
-smth.changePolyData(firstTest)
-firstTest = smth.polyDataSmoothed(50,0.2) #smooth again (but less) => points are NOT on the mesh but have right curve
+firstTest2 = smth.weightedCombination(500,0.1) #smoothing + weighting smoothing with firstTest
+smth.changePolyData(firstTest2)
+firstTest2 = smth.polyDataSmoothed(50,0.1) #smooth again (but less) => points are NOT on the mesh but have right curve
 rayC = raycasting.RayCasting(poly_data=polydata) #find points on mesh
-sommets = rayC.findPoints2(firstTest,False,0.001)
+sommets = rayC.findPoints2(firstTest2,True,0.001)
 
 pointCloud = vtkpointcloud.VtkPointCloud(zMin=bounds[4],zMax=bounds[5])
 for i in range (0,sommets.GetNumberOfPoints()):
     pointCloud.addPoint(sommets.GetPoint(i))  
-
 
 #Visualization stuff
 inputMapper = vtk.vtkDataSetMapper()

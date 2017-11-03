@@ -16,16 +16,21 @@ class Smoothing:
 
     def putPointsCloser(self,pts,threshold):
         (nbPts,x)=pts.shape
+        dists = np.zeros(nbPts)
         for i in range (0,nbPts-1):
             pt1 = pts[i]
             pt2 = pts[i+1]
             val = self.distPt(pt1,pt2)
+            dists[i]=val
             if val > threshold:
                 pt12 = (pt2-pt1)/4
                 newPt1 = pt1+pt12
                 newPt2 = pt2-pt12
                 pts[i]=newPt1
                 pts[i+1]=newPt2
+        print "---------"
+        print np.mean(dists)
+        print np.max(dists)        
 
     def smooth(self,nbIter,threshold):
         npPoints = np.zeros(shape=(self.poly_data.GetNumberOfPoints(),3))
@@ -61,7 +66,6 @@ class Smoothing:
             else:   
                 moy = [pt[0]+(firstPt[0]-pt[0])/2, pt[1]+(firstPt[1]-pt[1])/2 ,pt[2]] 
                 pointCloud.addPoint(moy)
-
         return pointCloud.vtkPolyData     
 
     def meanWeightedCombination(self,nbIter,threshold):

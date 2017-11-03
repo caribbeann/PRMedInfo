@@ -5,6 +5,16 @@ class MeshOperations:
     def __init__(self, *args, **kwargs):
         self.poly_data = kwargs.get("poly_data")
 
+    # def addTransformation(self, transformation):
+    #     # Add a transformation (type SampleTransformation) to the sequence.
+    #     self.transformations.append(transformation)
+
+    # def applyTransformations(self):
+    #     for transfo in self.transformations:
+    #         sample = transfo.apply(sample)
+    #     return sample 
+
+
     def translate(self,x,y,z):
         transform = vtk.vtkTransform()
         transform.Translate(x,y,z)
@@ -15,6 +25,23 @@ class MeshOperations:
         else:
             transformFilter.SetInputData(self.poly_data)
         transformFilter.Update()
+        return transformFilter.GetOutput()
+
+    def transl(self,tr):
+        return self.translate(tr[0],tr[1],tr[2])    
+
+    def rotateAngle(self,rotAxis,angle):
+        transform = vtk.vtkTransform()
+        transform.RotateWXYZ(angle,rotAxis)
+
+        transformFilter=vtk.vtkTransformPolyDataFilter()
+        transformFilter.SetTransform(transform)
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            transformFilter.SetInput(self.poly_data)
+        else:
+            transformFilter.SetInputData(self.poly_data)
+        transformFilter.Update()
+
         return transformFilter.GetOutput()
 
     def rotate(self, oldVect, newVect):
