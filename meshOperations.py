@@ -501,6 +501,33 @@ class MeshOperations:
         skeleton.SetLines(whole_line)
         return skeleton, alv_line_points
 
+    def numpyArrayToPolyData(self,npArray):
+        """
+        Turns a numpy array of points into a vtkPolydata
+        :param npArray: a np array containing points (3D)
+        :return: a vtkpolydata containing the points
+        """
+        vtkpoints = vtk.vtkPoints()  # here we add the points
+        whole_line_final = vtk.vtkCellArray()
+        poly_line_final = vtk.vtkPolyLine()
+        poly_line_final.GetPointIds().SetNumberOfIds(len(npArray))
+        counter = 0
+        for pt in npArray:
+            vtkPt = [pt[0],pt[1],pt[2]]
+            pid = vtkpoints.InsertNextPoint(vtkPt)
+            poly_line_final.GetPointIds().SetId(counter, pid)
+
+            counter += 1
+
+        poly_line_final.GetPointIds().SetNumberOfIds(counter - 1)
+        whole_line_final.InsertNextCell(poly_line_final)
+
+        polydata_final = vtk.vtkPolyData()
+        polydata_final.SetPoints(vtkpoints)
+        polydata_final.SetLines(whole_line_final)
+
+        return polydata_final
+
     def place_skeleton_on_original_mesh(self, original_poly, skeleton_points):
         """
         Places the computed alveolar line points on the mesh by intersecting vertical lines with the original 3D mold

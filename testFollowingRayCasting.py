@@ -1,12 +1,11 @@
 import vtk
-import numpy as np
 import meshOperations
-import renderer
-import raycasting
 import smoothing
 
 
-################## Part 1 : Preprocessing ########################
+##############################################################
+################## Part 1 : Preprocessing ####################
+##############################################################
 
 ### Load data, find principal components and reorient the data according to these principal components axes
 ### The first component will be the x axis and corresponds to the left-right axis
@@ -15,16 +14,11 @@ import smoothing
 ### Then crop the mesh to get rid of the tongue/palatin, to ease the computation
 
 # Load initial mesh
-reader = vtk.vtkOBJReader()
-reader.SetFileName("lowerJawMesh.obj")
-reader.Update()
-polydata = reader.GetOutput()
+meshOp = meshOperations.MeshOperations()
+polydata = meshOp.read("lowerJawMesh.obj")
 
 # Load suggested alveolar line for comparison purposes
-reader2 = vtk.vtkOBJReader()
-reader2.SetFileName("suggest_alveolarRidgeLine_lower_finalVisualization.obj")
-reader2.Update()
-suggest = reader2.GetOutput() 
+suggest = meshOp.read("suggest_alveolarRidgeLine_lower_finalVisualization.obj")
 
 # Load computed alveolar line
 reader3 = vtk.vtkPolyDataReader()
@@ -34,46 +28,37 @@ rays = reader3.GetOutput()
 
 
 # Reorient data
-meshOp = meshOperations.MeshOperations(poly_data=polydata)
-PCADict = meshOp.compute_pca()
-polydata = meshOp.rotate([0.0,1.0,0.0],PCADict['eigenvectors'][1])
+PCADict = meshOp.compute_pca(polydata)
+polydata = meshOp.rotate(polydata,[0.0,1.0,0.0],PCADict['eigenvectors'][1])
 
-meshOp.changePolyData(polydata)
-
-PCADict2 = meshOp.compute_pca()
-polydata = meshOp.rotate([0.0,0.0,1.0],PCADict2['eigenvectors'][2])
+PCADict2 = meshOp.compute_pca(polydata)
+polydata = meshOp.rotate(polydata,[0.0,0.0,1.0],PCADict2['eigenvectors'][2])
 
 translation = [-polydata.GetBounds()[0],-polydata.GetBounds()[2],-polydata.GetBounds()[4]]
-meshOp.changePolyData(polydata)
-polydata = meshOp.translate(translation[0],translation[1],translation[2])
+polydata = meshOp.translate(polydata,translation[0],translation[1],translation[2])
 
 
 # Reorient suggest to match the reoriented data
-meshOp2 = meshOperations.MeshOperations(poly_data=suggest)
-suggest = meshOp2.rotate([0.0,1.0,0.0],PCADict['eigenvectors'][1])
+suggest = meshOp.rotate(suggest,[0.0,1.0,0.0],PCADict['eigenvectors'][1])
 
-meshOp2.changePolyData(suggest)
-suggest = meshOp2.rotate([0.0,0.0,1.0],PCADict2['eigenvectors'][2])
+suggest = meshOp.rotate(suggest,[0.0,0.0,1.0],PCADict2['eigenvectors'][2])
 
-meshOp2.changePolyData(suggest)
-suggest = meshOp2.translate(translation[0],translation[1],translation[2])
+suggest = meshOp.translate(suggest,translation[0],translation[1],translation[2])
 
 
 # Compute center of mass
 bounds = polydata.GetBounds()
 
-meshOp.changePolyData(polydata)
-x,y,z = meshOp.compute_center_of_mass()
-polydata = meshOp.translate_to_origin()
-meshOp.changePolyData(suggest)
-suggest = meshOp.translate(-x,-y,-z)
+x,y,z = meshOp.compute_center_of_mass(polydata)
+polydata = meshOp.translate_to_origin(polydata)
+suggest = meshOp.translate(suggest,-x,-y,-z)
 
 
 
 
-
-
+##############################################################
 ################## Part 2 : Smoothing ########################
+##############################################################
 
 ### The computed polyline is very noisy, there is a need to smooth it
 ### Here we bring closer the points which are too far from each other, in order to have a smoother line
@@ -89,8 +74,9 @@ alv_line_points = smth.smooth(rays,50,0.1) #smooth again (but less) => points ar
 
 
 
-
-################## Part 3 : Postprocessing ########################
+##############################################################
+################## Part 3 : Postprocessing ###################
+##############################################################
 
 ### The smoothed line points are currently not on the mesh (as they are interpolations), we need to project them on the mesh
 
@@ -137,7 +123,9 @@ skeleton_final.SetLines(whole_line_final)
 
 
 
-#################### Part 4 : Visualization ########################
+##############################################################
+#################### Part 4 : Visualization ##################
+##############################################################
 
 ### Visualize the jaw mesh, as well as the computed alveolar line (white) and the suggested alveolar line (red)
 
