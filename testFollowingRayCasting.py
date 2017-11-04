@@ -35,12 +35,12 @@ rays = reader3.GetOutput()
 
 # Reorient data
 meshOp = meshOperations.MeshOperations(poly_data=polydata)
-PCADict = meshOp.computePCA()
+PCADict = meshOp.compute_pca()
 polydata = meshOp.rotate([0.0,1.0,0.0],PCADict['eigenvectors'][1])
 
 meshOp.changePolyData(polydata)
 
-PCADict2 = meshOp.computePCA()
+PCADict2 = meshOp.compute_pca()
 polydata = meshOp.rotate([0.0,0.0,1.0],PCADict2['eigenvectors'][2])
 
 translation = [-polydata.GetBounds()[0],-polydata.GetBounds()[2],-polydata.GetBounds()[4]]
@@ -63,8 +63,8 @@ suggest = meshOp2.translate(translation[0],translation[1],translation[2])
 bounds = polydata.GetBounds()
 
 meshOp.changePolyData(polydata)
-x,y,z = meshOp.computeCenterOfMass()
-polydata = meshOp.move_to_origin()
+x,y,z = meshOp.compute_center_of_mass()
+polydata = meshOp.translate_to_origin()
 meshOp.changePolyData(suggest)
 suggest = meshOp.translate(-x,-y,-z)
 

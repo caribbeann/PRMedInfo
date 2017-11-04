@@ -22,10 +22,10 @@ polydata = reader.GetOutput()
 
 # Reorient data
 meshOp = meshOperations.MeshOperations(poly_data=polydata)
-PCADict = meshOp.computePCA()
+PCADict = meshOp.compute_pca()
 reorientedPolyData = meshOp.rotate([0.0,1.0,0.0],PCADict['eigenvectors'][1])
 meshOp.changePolyData(reorientedPolyData)
-PCADict2 = meshOp.computePCA()
+PCADict2 = meshOp.compute_pca()
 reorientedPolyData = meshOp.rotate([0.0,0.0,1.0],PCADict2['eigenvectors'][2])
 print reorientedPolyData.GetBounds()
 meshOp.changePolyData(reorientedPolyData)
@@ -33,18 +33,18 @@ bounds = reorientedPolyData.GetBounds()
 polydata = meshOp.translate(-bounds[0],-bounds[2],-bounds[4])
 
 meshOp.changePolyData(polydata)
-gravity = meshOp.computeCenterOfMass()
+gravity = meshOp.compute_center_of_mass()
 
 # Crop upper part (the center of gravity should be under the teeth hopefully)
 bounds = polydata.GetBounds()
-polydata = meshOp.cropMesh(bounds[0],bounds[1],bounds[2],bounds[3],gravity[2],bounds[5])
+polydata = meshOp.crop_mesh(bounds[0], bounds[1], bounds[2], bounds[3], gravity[2], bounds[5])
 
 meshOp.changePolyData(polydata)
-polydata = meshOp.move_to_origin()
+polydata = meshOp.translate_to_origin()
 
 # Compute center of gravity
 meshOp.changePolyData(polydata)
-gravity = meshOp.computeCenterOfMass()
+gravity = meshOp.compute_center_of_mass()
 bounds = polydata.GetBounds()
 
 

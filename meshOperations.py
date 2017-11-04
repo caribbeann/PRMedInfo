@@ -2,6 +2,7 @@ import vtk
 import math
 import numpy as np
 
+
 class MeshOperations:
 
     def read(self, original_mesh):
@@ -21,32 +22,37 @@ class MeshOperations:
         return polydata
 
     def align_to_axes(self, polydata_input):
-        PCADict0 = self.computePCA(polydata_input)
-        reorientedPolyData = self.rotate(polydata_input, [0.0, 1.0, 0.0], PCADict0['eigenvectors'][0])
+        """
+        Align the axes of the scene with the main axes of the object by PCA
+        :param polydata_input: mesh to be aligned
+        :return: aligned vtkPolyData
+        """
+        pca_dict0 = self.compute_pca(polydata_input)
+        reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict0['eigenvectors'][0])
 
-        PCADict1 = self.computePCA(reorientedPolyData)
-        reorientedPolyData = self.rotate(reorientedPolyData, [0.0, 1.0, 0.0], PCADict1['eigenvectors'][1])
+        pca_dict1 = self.compute_pca(reoriented_poly_data)
+        reoriented_poly_data = self.rotate(reoriented_poly_data, [0.0, 1.0, 0.0], pca_dict1['eigenvectors'][1])
 
-        PCADict2 = self.computePCA(reorientedPolyData)
-        reorientedPolyData = self.rotate(reorientedPolyData, [0.0, 0.0, 1.0], PCADict2['eigenvectors'][2])
+        p_c_a_dict2 = self.compute_pca(reoriented_poly_data)
+        reoriented_poly_data = self.rotate(reoriented_poly_data, [0.0, 0.0, 1.0], p_c_a_dict2['eigenvectors'][2])
 
-        # move also suggestion
-        #suggest_line = self.rotate(reference_line, [1.0, 0.0, 0.0], PCADict0['eigenvectors'][0])
-        #suggest_line = self.rotate(reference_line, [0.0, 1.0, 0.0], PCADict1['eigenvectors'][1])
-        #suggest_line = self.rotate(reference_line, [0.0, 0.0, 1.0], PCADict2['eigenvectors'][2])
+        return reoriented_poly_data
 
-        return reorientedPolyData
-
-    def translate_edge_to_XY_plane_center_of_mass_Y_centered(self, input_poly):
+    def translate_to_xy_y_centered(self, input_poly):
+        """
+        Translates a mesh in the XY plane (Zmin=0) in the Y positive half and Y axis passing through the center of mass
+        :param input_poly: vtkPolyData to be translated
+        :return: translated vtkPolyData and the transformation vector used to translate
+        """
         tran1 = [0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4]]
         mesh = self.translate(input_poly, 0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4])
 
-        x, y, z = self.computeCenterOfMass(mesh)
+        x, y, z = self.compute_center_of_mass(mesh)
         tran2 = [-x, -y, -z]
         mesh = self.translate(mesh, -x, -y, -z)
 
         tran3 = [0, 0, -mesh.GetBounds()[4]]
-        mesh = self.translate(mesh, 0, 0, -mesh.GetBounds()[4])  # move in the XY plane to meet the line
+        mesh = self.translate(mesh, 0, 0, -mesh.GetBounds()[4])
 
         tran4 = [0, 0, 0]
         mesh = self.translate(mesh, 0, 0, 0)
@@ -58,183 +64,253 @@ class MeshOperations:
 
         return mesh, trans
 
-    def move_to_XY_plane(self, polydata_input):
-        x, y, _ = self.computeCenterOfMass(polydata_input)
+    def translate_to_xy_plane(self, polydata_input):
+        """
+        Translates a mesh to the XY plane (Zmin = 0)
+        :param polydata_input: vtkPolyData to be moved
+        :return: translated vtkPolyData
+        """
+        x, y, _ = self.compute_center_of_mass(polydata_input)
         z = polydata_input.GetBounds()[4]
         reoriented_polydata = self.translate(polydata_input, -x, -y, -z)
-
-        #suggest_line = self.translate(reference_line, -x, -y, -z)  # translate it together with the original line
-
         return reoriented_polydata
 
-    def translate(self, poly_data_input, x,y,z):
+    def translate(self, poly_data_input, x, y, z):
+        """
+        Translates a mesh using the given transformation vector
+        :param poly_data_input: vtkPolyData to be translated
+        :param x: x change
+        :param y: y change
+        :param z: z change
+        :return: translated vtkPolyData
+        """
         transform = vtk.vtkTransform()
-        transform.Translate(x,y,z)
-        transformFilter=vtk.vtkTransformPolyDataFilter()
-        transformFilter.SetTransform(transform)
+        transform.Translate(x, y, z)
+        transform_filter = vtk.vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(transform)
         if vtk.VTK_MAJOR_VERSION <= 5:
-            transformFilter.SetInput(poly_data_input)
+            transform_filter.SetInput(poly_data_input)
         else:
-            transformFilter.SetInputData(poly_data_input)
-        transformFilter.Update()
-        return transformFilter.GetOutput()
+            transform_filter.SetInputData(poly_data_input)
+        transform_filter.Update()
+        return transform_filter.GetOutput()
 
-    def translate_tuple(self, poly_data_input, tuple):
-        return self.translate(poly_data_input, tuple[0],tuple[1],tuple[2])
+    def translate_tuple(self, poly_data_input, t):
+        """
+        Translates a given mesh by the given vector
+        :param poly_data_input: vtkPolyData to be translated
+        :param t: vector tuple containing the transformation
+        :return: translated vtkPolyData
+        """
+        return self.translate(poly_data_input, t[0], t[1], t[2])
 
-    def rotateAngle(self,poly_data_input,rotAxis,angle):
+    def rotate_angle(self, poly_data_input, rot_axis, angle):
+        """
+        Rotate a poly data around a specific axis by a specific angle
+        :param poly_data_input: vtkPolyData to be rotated
+        :param rot_axis: rotation axis as a vector
+        :param angle: rotation angle
+        :return: rotated vtkPolyData
+        """
         transform = vtk.vtkTransform()
-        transform.RotateWXYZ(angle,rotAxis)
+        transform.RotateWXYZ(angle, rot_axis)
 
-        transformFilter=vtk.vtkTransformPolyDataFilter()
-        transformFilter.SetTransform(transform)
+        transform_filter = vtk.vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(transform)
         if vtk.VTK_MAJOR_VERSION <= 5:
-            transformFilter.SetInput(poly_data_input)
+            transform_filter.SetInput(poly_data_input)
         else:
-            transformFilter.SetInputData(poly_data_input)
-        transformFilter.Update()
+            transform_filter.SetInputData(poly_data_input)
+        transform_filter.Update()
 
-        return transformFilter.GetOutput()
+        return transform_filter.GetOutput()
 
-    def rotate(self, poly_data_input, oldVect, newVect):
+    def rotate(self, poly_data_input, old_vect, new_vect):
+        """
+        Rotates a mesh's axis to match the orientation of another vector
+        :param poly_data_input: vtkPolyData to be rotated
+        :param old_vect: original mesh axis
+        :param new_vect: new position of the mesh axis
+        :return: rotated vtkPolyData
+        """
         vmath = vtk.vtkMath()
-        rotAxis = [0.0,0.0,0.0]
-        vmath.Cross(newVect,oldVect,rotAxis)
-        theta = vmath.AngleBetweenVectors(oldVect,newVect)
-        #print vmath.DegreesFromRadians(theta)
+        rot_axis = [0.0, 0.0, 0.0]
+        vmath.Cross(new_vect, old_vect, rot_axis)
+        theta = vmath.AngleBetweenVectors(old_vect, new_vect)
 
         transform = vtk.vtkTransform()
-        transform.RotateWXYZ(vmath.DegreesFromRadians(theta),rotAxis)
+        transform.RotateWXYZ(vmath.DegreesFromRadians(theta), rot_axis)
 
-        transformFilter=vtk.vtkTransformPolyDataFilter()
-        transformFilter.SetTransform(transform)
+        transform_filter = vtk.vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(transform)
         if vtk.VTK_MAJOR_VERSION <= 5:
-            transformFilter.SetInput(poly_data_input)
+            transform_filter.SetInput(poly_data_input)
         else:
-            transformFilter.SetInputData(poly_data_input)
-        transformFilter.Update()
+            transform_filter.SetInputData(poly_data_input)
+        transform_filter.Update()
 
-        return transformFilter.GetOutput()
+        return transform_filter.GetOutput()
 
-    def scale(self,poly_data_input, x,y,z):
+    def scale(self, poly_data_input, x, y, z):
+        """
+        Scale a mesh with given transformation vector
+        :param poly_data_input: vtkPolyData to be scaled
+        :param x: x change
+        :param y: y change
+        :param z: z change
+        :return:
+        """
         transform = vtk.vtkTransform()
         transform.Scale(x, y, z)
-        transformFilter = vtk.vtkTransformPolyDataFilter()
-        transformFilter.SetTransform(transform)
+        transform_filter = vtk.vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(transform)
         if vtk.VTK_MAJOR_VERSION <= 5:
-            transformFilter.SetInput(poly_data_input)
+            transform_filter.SetInput(poly_data_input)
         else:
-            transformFilter.SetInputData(poly_data_input)
-        transformFilter.Update()
-        return transformFilter.GetOutput()
+            transform_filter.SetInputData(poly_data_input)
+        transform_filter.Update()
+        return transform_filter.GetOutput()
 
-    def move_to_origin(self, poly_data_input):
-        x, y, z = self.computeCenterOfMass(poly_data_input)
+    def translate_to_origin(self, poly_data_input):
+        """
+        Moves a mesh with its center of mass to the origin of the coordinate system
+        :param poly_data_input: vtkPolyData to be moved
+        :return: translated vtkPolyData
+        """
+        x, y, z = self.compute_center_of_mass(poly_data_input)
         moved_poly_data = self.translate(poly_data_input, -x, -y, -z)
         return moved_poly_data
 
-    def computePCA(self, poly_data_input):
-        xArray = vtk.vtkDoubleArray()
-        xArray.SetNumberOfComponents(1)
-        xArray.SetName('x')
-        yArray = vtk.vtkDoubleArray()
-        yArray.SetNumberOfComponents(1)
-        yArray.SetName('y')
-        zArray = vtk.vtkDoubleArray()
-        zArray.SetNumberOfComponents(1)
-        zArray.SetName('z')
+    def compute_pca(self, poly_data_input):
+        """
+        Computes Principal Component Analysis of a mesh
+        :param poly_data_input: compute PCA of this vtkPolyData
+        :return: eigenvalues, eigenvectors
+        """
+        x_array = vtk.vtkDoubleArray()
+        x_array.SetNumberOfComponents(1)
+        x_array.SetName('x')
+        y_array = vtk.vtkDoubleArray()
+        y_array.SetNumberOfComponents(1)
+        y_array.SetName('y')
+        z_array = vtk.vtkDoubleArray()
+        z_array.SetNumberOfComponents(1)
+        z_array.SetName('z')
 
-        for i in range (0,poly_data_input.GetNumberOfPoints()):
+        for i in range(0, poly_data_input.GetNumberOfPoints()):
             pt = poly_data_input.GetPoint(i)
-            xArray.InsertNextValue(pt[0])
-            yArray.InsertNextValue(pt[1])
-            zArray.InsertNextValue(pt[2])
+            x_array.InsertNextValue(pt[0])
+            y_array.InsertNextValue(pt[1])
+            z_array.InsertNextValue(pt[2])
 
         table = vtk.vtkTable()
-        table.AddColumn(xArray)
-        table.AddColumn(yArray)
-        table.AddColumn(zArray)    
+        table.AddColumn(x_array)
+        table.AddColumn(y_array)
+        table.AddColumn(z_array)
 
-        pcaStats = vtk.vtkPCAStatistics()
+        pca_stats = vtk.vtkPCAStatistics()
 
         if vtk.VTK_MAJOR_VERSION <= 5:
-            pcaStats.SetInput(table)
+            pca_stats.SetInput(table)
 
         else:
-            pcaStats.SetInputData(table)
+            pca_stats.SetInputData(table)
 
-        pcaStats.SetColumnStatus("x",1)
-        pcaStats.SetColumnStatus("y",1)
-        pcaStats.SetColumnStatus("z",1)
+        pca_stats.SetColumnStatus("x", 1)
+        pca_stats.SetColumnStatus("y", 1)
+        pca_stats.SetColumnStatus("z", 1)
 
-        pcaStats.RequestSelectedColumns()
-        pcaStats.SetDeriveOption(True)
-        pcaStats.Update()
+        pca_stats.RequestSelectedColumns()
+        pca_stats.SetDeriveOption(True)
+        pca_stats.Update()
 
         eigenvalues = vtk.vtkDoubleArray()
-        pcaStats.GetEigenvalues(eigenvalues)
+        pca_stats.GetEigenvalues(eigenvalues)
         eigenvector0 = vtk.vtkDoubleArray()
-        pcaStats.GetEigenvector(0,eigenvector0)
+        pca_stats.GetEigenvector(0, eigenvector0)
         eigenvector1 = vtk.vtkDoubleArray()
-        pcaStats.GetEigenvector(1,eigenvector1)
+        pca_stats.GetEigenvector(1, eigenvector1)
         eigenvector2 = vtk.vtkDoubleArray()
-        pcaStats.GetEigenvector(2,eigenvector2)
+        pca_stats.GetEigenvector(2, eigenvector2)
 
-        eigv0 = [0.0,0.0,0.0]
-        eigv1 = [0.0,0.0,0.0]
-        eigv2 = [0.0,0.0,0.0]
+        eigv0 = [0.0, 0.0, 0.0]
+        eigv1 = [0.0, 0.0, 0.0]
+        eigv2 = [0.0, 0.0, 0.0]
 
-        for i in range (0,3):
+        for i in range(0, 3):
             eigv0[i] = eigenvector0.GetValue(i)
             eigv1[i] = eigenvector1.GetValue(i)
             eigv2[i] = eigenvector2.GetValue(i)
 
+        return {'eigenvalues': eigenvalues, 'eigenvectors': [eigv0, eigv1, eigv2]}
 
-        return {'eigenvalues':eigenvalues,'eigenvectors':[eigv0,eigv1,eigv2]}
-
-
-    def computeCenterOfMass(self, poly_data_input):
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        if vtk.VTK_MAJOR_VERSION<=5:
-            centerOfMassFilter.SetInput(poly_data_input)
+    def compute_center_of_mass(self, poly_data_input):
+        """
+        Computes the coordinates of the center of mass of a mesh
+        :param poly_data_input: input vtkPolyData
+        :return: center of mass coordinates
+        """
+        center_of_mass_filter = vtk.vtkCenterOfMass()
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            center_of_mass_filter.SetInput(poly_data_input)
         else:
-            centerOfMassFilter.SetInputData(poly_data_input)
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
+            center_of_mass_filter.SetInputData(poly_data_input)
+        center_of_mass_filter.SetUseScalarsAsWeights(False)
+        center_of_mass_filter.Update()
 
-        return centerOfMassFilter.GetCenter()#(center)
+        return center_of_mass_filter.GetCenter()
 
-    # crop the mesh, keep what is inside the box
-    def cropMesh(self,poly_data_input, xmin,xmax,ymin,ymax,zmin,zmax):
-
-
-
+    def crop_mesh(self, poly_data_input, xmin, xmax, ymin, ymax, zmin, zmax):
+        """
+        Crop part of the mesh specified
+        :param poly_data_input: vtkPolyData to be cropped
+        :param xmin:
+        :param xmax:
+        :param ymin:
+        :param ymax:
+        :param zmin:
+        :param zmax:
+        :return: cropped vtkPolyData
+        """
         box = vtk.vtkBox()
-        box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+        box.SetBounds(xmin, xmax, ymin, ymax, zmin, zmax)
 
-
-        pdNormals = vtk.vtkPolyDataNormals()
-        pdNormals.SetInputData(poly_data_input)
+        pd_normals = vtk.vtkPolyDataNormals()
+        pd_normals.SetInputData(poly_data_input)
 
         clipper = vtk.vtkClipPolyData()
-        clipper.SetInputConnection(pdNormals.GetOutputPort())
+        clipper.SetInputConnection(pd_normals.GetOutputPort())
         clipper.SetClipFunction(box)
         clipper.GenerateClippedOutputOn()
         clipper.InsideOutOff()
         clipper.Update()
         return clipper.GetClippedOutput()
 
-
-    def crop_mesh_maximum(self, poly_input, xmin,xmax,ymin,ymax,zmin,zmax, min_percent, max_percent, percent_step):
+    def crop_mesh_maximum(self, poly_input, xmin, xmax, ymin, ymax, zmin, zmax, min_percent, max_percent, percent_step):
+        """
+        Crop a given mesh but with constraints on the maximum crop. The percentages represent parts of total Z height
+        of the mesh
+        :param poly_input:
+        :param xmin:
+        :param xmax:
+        :param ymin:
+        :param ymax:
+        :param zmin:
+        :param zmax:
+        :param min_percent: below this amount, the mesh will not be kept
+        :param max_percent: above this amount, cropping is not allowed anymore
+        :param percent_step:
+        :return:
+        """
         con_filter = vtk.vtkPolyDataConnectivityFilter()
 
         last_biggest_percentage = 0
         last_crop_poly = poly_input
         for i in np.arange(min_percent, max_percent, percent_step):
-            cropped_poly_data = self.cropMesh(poly_input,
-                                            xmin, xmax,
-                                            ymin, ymax,
-                                            i * zmin, zmax)
+            cropped_poly_data = self.crop_mesh(poly_input,
+                                               xmin, xmax,
+                                               ymin, ymax,
+                                               i * zmin, zmax)
             con_filter.SetInputData(cropped_poly_data)
             con_filter.SetExtractionModeToAllRegions()
             con_filter.Update()
@@ -244,30 +320,36 @@ class MeshOperations:
                     last_crop_poly = cropped_poly_data
 
         return last_crop_poly
-    def meshTo3DImg(self, poly_data_input):
-        whiteImage = vtk.vtkImageData()
+
+    def mesh_to_3d_img(self, poly_data_input):
+        """
+        transform a mesh to a 3D image
+        :param poly_data_input: vtkPolyData to be transformed
+        :return: vtkImageStencil of the mesh
+        """
+        white_image = vtk.vtkImageData()
         bounds = poly_data_input.GetBounds()
-        spacing = [0.5,0.5,0.5]
-        whiteImage.SetSpacing(spacing)
-        dim = [0,0,0]
-        for i in range (0,3):
+        spacing = [0.5, 0.5, 0.5]
+        white_image.SetSpacing(spacing)
+        dim = [0, 0, 0]
+        for i in range(0, 3):
             dim[i] = int(math.ceil(bounds[i*2+1]-bounds[i*2])/spacing[i])
             print dim[i]
-        whiteImage.SetDimensions(dim)
-        whiteImage.SetExtent(0,dim[0]-1,0,dim[1]-1,0,dim[2]-1)
-        origin = [bounds[0]+spacing[0]/2,bounds[2]+spacing[1]/2,bounds[4]+spacing[2]/2]
-        whiteImage.SetOrigin(origin)
+        white_image.SetDimensions(dim)
+        white_image.SetExtent(0, dim[0]-1, 0, dim[1]-1, 0, dim[2]-1)
+        origin = [bounds[0]+spacing[0]/2, bounds[2]+spacing[1]/2, bounds[4]+spacing[2]/2]
+        white_image.SetOrigin(origin)
 
         if vtk.VTK_MAJOR_VERSION <= 5:
-            whiteImage.SetScalarTypeToUnsignedChar()
-            whiteImage.AllocateScalars()
+            white_image.SetScalarTypeToUnsignedChar()
+            white_image.AllocateScalars()
         else:
-            whiteImage.AllocateScalars(vtk.VTK_UNSIGNED_CHAR,1)
+            white_image.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
 
         inval = 255
         outval = 0
-        for i in range (0, whiteImage.GetNumberOfPoints()):
-            whiteImage.GetPointData().GetScalars().SetTuple1(i,inval)
+        for i in range(0, white_image.GetNumberOfPoints()):
+            white_image.GetPointData().GetScalars().SetTuple1(i, inval)
 
         pol2stenc = vtk.vtkPolyDataToImageStencil()
         if vtk.VTK_MAJOR_VERSION <= 5:
@@ -277,15 +359,15 @@ class MeshOperations:
 
         pol2stenc.SetOutputOrigin(origin)
         pol2stenc.SetOutputSpacing(spacing)
-        pol2stenc.SetOutputWholeExtent(whiteImage.GetExtent())
+        pol2stenc.SetOutputWholeExtent(white_image.GetExtent())
         pol2stenc.Update()
 
         imgstenc = vtk.vtkImageStencil()
         if vtk.VTK_MAJOR_VERSION <= 5:
-            imgstenc.SetInput(whiteImage)
+            imgstenc.SetInput(white_image)
             imgstenc.SetStencil(pol2stenc.GetOutput())
         else:
-            imgstenc.SetInputData(whiteImage)
+            imgstenc.SetInputData(white_image)
             imgstenc.SetStencilConnection(pol2stenc.GetOutputPort())
 
         imgstenc.ReverseStencilOff()
@@ -293,53 +375,78 @@ class MeshOperations:
         imgstenc.Update()
         return imgstenc.GetOutput()
 
-    def nbPointsInsideBox(self,poly_data_input,xmin,xmax,ymin,ymax,zmin,zmax):
+    def nr_points_inside_box(self, poly_data_input, xmin, xmax, ymin, ymax, zmin, zmax):
+        """
+        Returns the number of points a mesh has inside a box with specified bounds
+        :param poly_data_input: vtkPolyData to be analyzed
+        :param xmin: bounds of the box
+        :param xmax:
+        :param ymin:
+        :param ymax:
+        :param zmin:
+        :param zmax:
+        :return: number of points inside the specified box
+        """
         box = vtk.vtkCubeSource()
-        box.SetBounds(xmin,xmax,ymin,ymax,zmin,zmax)
+        box.SetBounds(xmin, xmax, ymin, ymax, zmin, zmax)
         box.Update()
 
-        selectEnclosedPoints = vtk.vtkSelectEnclosedPoints()
+        select_enclosed_points = vtk.vtkSelectEnclosedPoints()
         if vtk.VTK_MAJOR_VERSION <= 5:
-            selectEnclosedPoints.SetInput(poly_data_input)
-            selectEnclosedPoints.SetSurface(box.GetOutput())
+            select_enclosed_points.SetInput(poly_data_input)
+            select_enclosed_points.SetSurface(box.GetOutput())
         else:
-            selectEnclosedPoints.SetInputData(poly_data_input)
-            selectEnclosedPoints.SetSurfaceData(box.GetOutput())
+            select_enclosed_points.SetInputData(poly_data_input)
+            select_enclosed_points.SetSurfaceData(box.GetOutput())
 
-        selectEnclosedPoints.Update()
+        select_enclosed_points.Update()
 
-        nbOfPointsInside = 0
-        for i in range (0, poly_data_input.GetNumberOfPoints()):
-            if selectEnclosedPoints.IsInside(i):
-                nbOfPointsInside = nbOfPointsInside + 1
+        nb_of_points_inside = 0
+        for i in range(0, poly_data_input.GetNumberOfPoints()):
+            if select_enclosed_points.IsInside(i):
+                nb_of_points_inside = nb_of_points_inside + 1
 
-        return nbOfPointsInside 
+        return nb_of_points_inside
 
- 
-
-    def extractEdges(self, poly_data_input):
-        vextractEdges = vtk.vtkFeatureEdges()
-        vextractEdges.FeatureEdgesOn()
-        vextractEdges.BoundaryEdgesOff()
-        vextractEdges.ColoringOn()
-        vextractEdges.SetInputData(poly_data_input)
-        vextractEdges.Update()    
-        return vextractEdges.GetOutput()
+    def extract_edges(self, poly_data_input):
+        """
+        Extracts the edges of a mesh
+        :param poly_data_input: vtkPolyData to be analyzed
+        :return: vtkPolyData containing only edges
+        """
+        vextract_edges = vtk.vtkFeatureEdges()
+        vextract_edges.FeatureEdgesOn()
+        vextract_edges.BoundaryEdgesOff()
+        vextract_edges.ColoringOn()
+        vextract_edges.SetInputData(poly_data_input)
+        vextract_edges.Update()
+        return vextract_edges.GetOutput()
 
     def get_outer_edges(self, input_poly):
-        featureEdges = vtk.vtkFeatureEdges()
+        """
+        Extract only the outer edges of a mesh
+        :param input_poly: vtkPolyData to be analyzed
+        :return: vtkPolyData containing only edges
+        """
+        feature_edges = vtk.vtkFeatureEdges()
 
-        featureEdges.SetInputData(input_poly)
-        featureEdges.BoundaryEdgesOn()
-        featureEdges.FeatureEdgesOff()
-        featureEdges.ManifoldEdgesOff()
-        featureEdges.NonManifoldEdgesOff()
-        featureEdges.Update()
-        edge_poly = featureEdges.GetOutput()
+        feature_edges.SetInputData(input_poly)
+        feature_edges.BoundaryEdgesOn()
+        feature_edges.FeatureEdgesOff()
+        feature_edges.ManifoldEdgesOff()
+        feature_edges.NonManifoldEdgesOff()
+        feature_edges.Update()
+        edge_poly = feature_edges.GetOutput()
 
         return edge_poly
 
     def get_edge_skeleton(self, input_poly):
+        """
+        Computes the skeleton the mesh
+        :param input_poly: outer edge vtkPolyData of the maxilar shape
+        :return: vtkPolyData of the alveolar line,
+                vtkPoints containing all the points on the line
+        """
         # get intersection of rays sent from the center of mass outwards
         edge_locator = vtk.vtkCellLocator()
         edge_locator.SetDataSet(input_poly)
@@ -366,7 +473,7 @@ class MeshOperations:
         counter = 0
         for i in range(end_points.shape[0]):
 
-            nr = edge_locator.FindCellsAlongLine(start_point, end_points[i], 0.001, cells_edges)
+            edge_locator.FindCellsAlongLine(start_point, end_points[i], 0.001, cells_edges)
             pid1 = vtk.vtkIdList()  # contains the point ids of the first intersection
             pid2 = vtk.vtkIdList()
             if cells_edges.GetNumberOfIds() == 2:
@@ -395,12 +502,17 @@ class MeshOperations:
         return skeleton, alv_line_points
 
     def place_skeleton_on_original_mesh(self, original_poly, skeleton_points):
+        """
+        Places the computed alveolar line points on the mesh by intersecting vertical lines with the original 3D mold
+        to find intersection points and therefore to find elevations
+        :param original_poly: vtkPolyData of the original 3D mold
+        :param skeleton_points: points of the alveolar line to be raised at the level of the original 3D mold
+        :return: vtkPolyData of the final skeleton
+        """
 
         original_locator = vtk.vtkOBBTree()
         original_locator.SetDataSet(original_poly)
         original_locator.BuildLocator()
-
-        cells_original = vtk.vtkIdList()
 
         line_length = abs(original_poly.GetBounds()[5]) + 1
 
@@ -412,11 +524,9 @@ class MeshOperations:
         poly_line_final.GetPointIds().SetNumberOfIds(len(skeleton_points))
         counter = 0
         for alv_line_point in skeleton_points:
-            nr = original_locator.IntersectWithLine(alv_line_point,
-                                                    [alv_line_point[0], alv_line_point[1],
-                                                     alv_line_point[2] + line_length],
-                                                    intersection_points,
-                                                    intersection_cells)
+            original_locator.IntersectWithLine(alv_line_point, [alv_line_point[0], alv_line_point[1],
+                                                                alv_line_point[2] + line_length], intersection_points,
+                                               intersection_cells)
 
             if intersection_points.GetNumberOfPoints() >= 1:
                 p_int = intersection_points.GetPoint(intersection_points.GetNumberOfPoints() - 1)

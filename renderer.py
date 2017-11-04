@@ -1,73 +1,56 @@
 import vtk
 
-class Renderer():
-    def __init__(self, *args, **kwargs):
-        self.poly_data = kwargs.get("poly_data")
-        self.file_name = kwargs.get("file_name")
-        self.wire_frame = kwargs.get("wire_frame")
+
+class Renderer:
+
+    def __init__(self):
+        self.ren = vtk.vtkRenderer()
 
     def render(self):
-        if self.poly_data == None:
-           self.poly_data = self.__loadOBJ()
+        """
+        Creates vtkAxesActor, a render window, an interactor and starts the rendering
+        :return:
+        """
 
         # Create a rendering window and renderer
-
-        ren = vtk.vtkRenderer()
-
         transform = vtk.vtkTransform()
         transform.Translate(1.0, 0.0, 0.0)
-        transform.Scale(50,50,50)
-         
+        transform.Scale(50, 50, 50)
+
+        # add axes
         axes = vtk.vtkAxesActor()
         axes.SetUserTransform(transform)
-        ren.AddActor(axes)
+        self.ren.AddActor(axes)
 
-        ren.ResetCamera()
+        self.ren.ResetCamera()
 
-        renWin = vtk.vtkRenderWindow()
+        ren_win = vtk.vtkRenderWindow()
 
-        renWin.AddRenderer(ren)
+        ren_win.AddRenderer(self.ren)
 
         # Create a RenderWindowInteractor to permit manipulating the camera
 
         iren = vtk.vtkRenderWindowInteractor()
 
-        iren.SetRenderWindow(renWin)
+        iren.SetRenderWindow(ren_win)
 
-        #style = vtk.vtkInteractorStyleTrackballCamera()
-
-        #iren.SetInteractorStyle(style)
-
-
-        ren.AddActor(self.__polyDataToActor())
-
-        ren.SetBackground(0.1, 0.1, 0.1)
+        self.ren.SetBackground(0.1, 0.1, 0.1)
 
         # enable user interface interactor
 
         iren.Initialize()
 
-        renWin.Render()
+        ren_win.Render()
 
         iren.Start()
 
-    def __loadOBJ(self):
-
-        reader = vtk.vtkOBJReader()
-
-        reader.SetFileName(self.file_name)
-
-        reader.Update()
-
-        polydata = reader.GetOutput()
-
-        return polydata
-
-    def __polyDataToActor(self):
-
-        """Wrap the provided vtkPolyData object in a mapper and an actor, returning
-
-        the actor."""
+    def add_actor(self, input_poly_data, **kwargs):
+        """
+        Transforms a vtkPolyData to an actor and adds it to the renderer
+        :param input_poly_data: vtkPolyData to be transformed
+        :param kwargs: color, wireframe boolean, linewidth, etc
+        :return: vtkActor
+        """
 
         mapper = vtk.vtkPolyDataMapper()
 
@@ -75,19 +58,25 @@ class Renderer():
 
             # mapper.SetInput(reader.GetOutput())
 
-            mapper.SetInput(self.poly_data)
+            mapper.SetInput(input_poly_data)
 
         else:
 
-            mapper.SetInputData(self.poly_data)
+            mapper.SetInputData(input_poly_data)
 
         actor = vtk.vtkActor()
 
         actor.SetMapper(mapper)
 
-        if self.wire_frame:
-            actor.GetProperty().SetRepresentationToWireframe()
+        if "wireframe" in kwargs:
+            if kwargs.get("wireframe"):
+                actor.GetProperty().SetRepresentationToWireframe()
 
-        actor.GetProperty().SetColor(0.8, 0.8, 1.0)
+        if "color" in kwargs:
+            actor.GetProperty().SetColor(kwargs.get("color"))
 
+        if "linewidth" in kwargs:
+            actor.GetProperty().SetLineWidth(kwargs.get("linewidth"))
+
+        self.ren.AddActor(actor)
         return actor
