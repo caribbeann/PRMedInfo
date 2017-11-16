@@ -16,7 +16,7 @@ import raycasting
 
 # Load data
 meshOp = meshOperations.MeshOperations()
-polydata = meshOp.read("lowerJawMesh.obj")
+polydata = meshOp.read("upperJawMesh.obj")
 
 # Reorient data
 PCADict = meshOp.compute_pca(polydata)

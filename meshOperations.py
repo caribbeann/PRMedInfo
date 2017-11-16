@@ -27,14 +27,18 @@ class MeshOperations:
         :param polydata_input: mesh to be aligned
         :return: aligned vtkPolyData
         """
-        pca_dict0 = self.compute_pca(polydata_input)
-        reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict0['eigenvectors'][0])
+        # pca_dict0 = self.compute_pca(polydata_input)
+        # reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict0['eigenvectors'][0])
 
-        pca_dict1 = self.compute_pca(reoriented_poly_data)
-        reoriented_poly_data = self.rotate(reoriented_poly_data, [0.0, 1.0, 0.0], pca_dict1['eigenvectors'][1])
+        pca_dict1 = self.compute_pca(polydata_input)
+        reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict1['eigenvectors'][1])
+
+        reoriented_poly_data = self.translate_to_origin(reoriented_poly_data)
 
         p_c_a_dict2 = self.compute_pca(reoriented_poly_data)
         reoriented_poly_data = self.rotate(reoriented_poly_data, [0.0, 0.0, 1.0], p_c_a_dict2['eigenvectors'][2])
+
+        reoriented_poly_data = self.translate_to_origin(reoriented_poly_data)
 
         return reoriented_poly_data
 

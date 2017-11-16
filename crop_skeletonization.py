@@ -7,16 +7,19 @@ import decimator
 ########################
 meshOp = meshOperations.MeshOperations()
 
-original_polydata = meshOp.read(r"./image_data/lowerJawMesh.obj")
+original_polydata = meshOp.read(r"upperJawMesh.obj")
 
 
 ########################
 ##### 1. ALIGN MESH ####
 ########################
 
-reoriented_polydata = meshOp.align_to_axes(original_polydata)
+reoriented_polydata = meshOp.translate_to_origin(original_polydata)
+
+reoriented_polydata = meshOp.align_to_axes(reoriented_polydata)
 
 reoriented_polydata = meshOp.translate_to_xy_plane(reoriented_polydata)
+
 
 #####################################
 #### 2. SIMPLIFY (decimate) MESH ####
