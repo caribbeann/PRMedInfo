@@ -30,17 +30,24 @@ class MeshOperations:
         # pca_dict0 = self.compute_pca(polydata_input)
         # reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict0['eigenvectors'][0])
 
-        pca_dict1 = self.compute_pca(polydata_input)
-        reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict1['eigenvectors'][1])
+        tmp_transform = vtk.vtkTransform()
+        tmp_transform.PostMultiply()
 
-        reoriented_poly_data = self.translate_to_origin(reoriented_poly_data)
+        pca_dict1 = self.compute_pca(polydata_input)
+        reoriented_poly_data, trans = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict1['eigenvectors'][1])
+        tmp_transform.Concatenate(trans)
+        reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
+        tmp_transform.Concatenate(trans)
 
         p_c_a_dict2 = self.compute_pca(reoriented_poly_data)
-        reoriented_poly_data = self.rotate(reoriented_poly_data, [0.0, 0.0, 1.0], p_c_a_dict2['eigenvectors'][2])
+        reoriented_poly_data, trans = self.rotate(reoriented_poly_data, [0.0, 0.0, 1.0], p_c_a_dict2['eigenvectors'][2])
+        tmp_transform.Concatenate(trans)
+        reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
+        tmp_transform.Concatenate(trans)
 
-        reoriented_poly_data = self.translate_to_origin(reoriented_poly_data)
+        print(tmp_transform.GetNumberOfConcatenatedTransforms())
 
-        return reoriented_poly_data
+        return reoriented_poly_data, tmp_transform
 
     def translate_to_xy_y_centered(self, input_poly):
         """
@@ -49,20 +56,20 @@ class MeshOperations:
         :return: translated vtkPolyData and the transformation vector used to translate
         """
         tran1 = [0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4]]
-        mesh = self.translate(input_poly, 0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4])
+        mesh, trans = self.translate(input_poly, 0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4])
 
         x, y, z = self.compute_center_of_mass(mesh)
         tran2 = [-x, -y, -z]
-        mesh = self.translate(mesh, -x, -y, -z)
+        mesh, trans = self.translate(mesh, -x, -y, -z)
 
         tran3 = [0, 0, -mesh.GetBounds()[4]]
-        mesh = self.translate(mesh, 0, 0, -mesh.GetBounds()[4])
+        mesh, trans = self.translate(mesh, 0, 0, -mesh.GetBounds()[4])
 
         tran4 = [0, 0, 0]
-        mesh = self.translate(mesh, 0, 0, 0)
+        mesh, trans = self.translate(mesh, 0, 0, 0)
 
         tran5 = [0, -mesh.GetBounds()[2], 0]
-        mesh = self.translate(mesh, 0, -mesh.GetBounds()[2], 0)
+        mesh, trans = self.translate(mesh, 0, -mesh.GetBounds()[2], 0)
 
         trans = tran1+tran2+tran3+tran4+tran5
 
@@ -76,8 +83,8 @@ class MeshOperations:
         """
         x, y, _ = self.compute_center_of_mass(polydata_input)
         z = polydata_input.GetBounds()[4]
-        reoriented_polydata = self.translate(polydata_input, -x, -y, -z)
-        return reoriented_polydata
+        reoriented_polydata, trans = self.translate(polydata_input, -x, -y, -z)
+        return reoriented_polydata, trans
 
     def translate(self, poly_data_input, x, y, z):
         """
@@ -86,7 +93,7 @@ class MeshOperations:
         :param x: x change
         :param y: y change
         :param z: z change
-        :return: translated vtkPolyData
+        :return: translated vtkPolyData and vtkTransform used
         """
         transform = vtk.vtkTransform()
         transform.Translate(x, y, z)
@@ -97,7 +104,37 @@ class MeshOperations:
         else:
             transform_filter.SetInputData(poly_data_input)
         transform_filter.Update()
-        return transform_filter.GetOutput()
+
+        return transform_filter.GetOutput(), transform
+
+    def transform(self, poly_data_input, transform):
+        """
+        Transforms (rotates, scales or translates a mesh with a given transform)
+        :param poly_data_input: vtkPolyData to be transformed
+        :param transform: vtkTransform to be applied
+        :return: transformed vtkPolyData and vtkTransform used
+        """
+        local_transform = vtk.vtkTransform()
+
+        if transform.GetOrientationWXYZ()[0] != 0:
+            tmp = transform.GetOrientationWXYZ()
+            local_transform.RotateWXYZ(tmp[0], tmp[1:])
+        if transform.GetScale() != [1.0, 1.0, 1.0]:
+            local_transform.Scale(transform.GetScale())
+        if transform.GetPosition() != [0.0, 0.0, 0.0]:
+            local_transform.Translate(transform.GetPosition())
+
+        transform_filter = vtk.vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(transform)
+        if vtk.VTK_MAJOR_VERSION <= 5:
+            transform_filter.SetInput(poly_data_input)
+        else:
+            transform_filter.SetInputData(poly_data_input)
+        transform_filter.Update()
+
+        return transform_filter.GetOutput(), local_transform
+
+
 
     def translate_tuple(self, poly_data_input, t):
         """
@@ -153,7 +190,7 @@ class MeshOperations:
             transform_filter.SetInputData(poly_data_input)
         transform_filter.Update()
 
-        return transform_filter.GetOutput()
+        return transform_filter.GetOutput(), transform
 
     def scale(self, poly_data_input, x, y, z):
         """
@@ -179,11 +216,11 @@ class MeshOperations:
         """
         Moves a mesh with its center of mass to the origin of the coordinate system
         :param poly_data_input: vtkPolyData to be moved
-        :return: translated vtkPolyData
+        :return: translated vtkPolyData and vtkTransform used
         """
         x, y, z = self.compute_center_of_mass(poly_data_input)
-        moved_poly_data = self.translate(poly_data_input, -x, -y, -z)
-        return moved_poly_data
+        moved_poly_data, transform = self.translate(poly_data_input, -x, -y, -z)
+        return moved_poly_data, transform
 
     def compute_pca(self, poly_data_input):
         """

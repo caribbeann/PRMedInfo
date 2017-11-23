@@ -7,18 +7,23 @@ import decimator
 ########################
 meshOp = meshOperations.MeshOperations()
 
-original_polydata = meshOp.read(r"upperJawMesh.obj")
-
+original_polydata = meshOp.read(r"./image_data/01_Gips01/upperJawMesh.obj")
+suggest_line = meshOp.read(r"./image_data/01_Gips01/suggest_alveolarRidgeLine_upper_coarse.obj")
 
 ########################
 ##### 1. ALIGN MESH ####
 ########################
 
-reoriented_polydata = meshOp.translate_to_origin(original_polydata)
+reoriented_polydata, transform = meshOp.translate_to_origin(original_polydata)
+suggest_line, _ = meshOp.transform(suggest_line, transform)
 
-reoriented_polydata = meshOp.align_to_axes(reoriented_polydata)
 
-reoriented_polydata = meshOp.translate_to_xy_plane(reoriented_polydata)
+reoriented_polydata, transform = meshOp.align_to_axes(reoriented_polydata)
+suggest_line, _ = meshOp.transform(suggest_line, transform)
+
+
+reoriented_polydata, transform = meshOp.translate_to_xy_plane(reoriented_polydata)
+suggest_line, _ = meshOp.transform(suggest_line, transform)
 
 
 #####################################
@@ -56,8 +61,8 @@ dec_poly_data = dec.decimate(cropped_poly)
 
 edge_poly = meshOp.get_outer_edges(dec_poly_data)
 edge_poly,trans = meshOp.translate_to_xy_y_centered(edge_poly)
-original_aligned_poly = meshOp.translate_tuple(reoriented_polydata, trans)
-
+original_aligned_poly, transform = meshOp.translate_tuple(reoriented_polydata, trans)
+suggest_line, _ = meshOp.transform(suggest_line, transform)
 
 skeleton, skeleton_points = meshOp.get_edge_skeleton(edge_poly)
 
@@ -66,18 +71,13 @@ skeleton, skeleton_points = meshOp.get_edge_skeleton(edge_poly)
 skeleton_final = meshOp.place_skeleton_on_original_mesh(original_aligned_poly, skeleton_points)
 
 
-##########################################
-### add suggested line (optional step) ### TO DO
-##########################################
-
-
 ###############################
 ### 6. visualize everything ###
 ###############################
 
-
 rend = renderer.Renderer()
 rend.add_actor(original_aligned_poly, color=[1,1,1], wireframe= False)
+rend.add_actor(suggest_line, color=[1,0,0], wireframe=False)
 rend.add_actor(skeleton_final, color = [0,0,1], wireframe=False, linewidth=5)
 rend.render()
 
