@@ -45,8 +45,6 @@ class MeshOperations:
         reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
         tmp_transform.Concatenate(trans)
 
-        print(tmp_transform.GetNumberOfConcatenatedTransforms())
-
         return reoriented_poly_data, tmp_transform
 
     def translate_to_xy_y_centered(self, input_poly):
@@ -375,7 +373,7 @@ class MeshOperations:
         dim = [0, 0, 0]
         for i in range(0, 3):
             dim[i] = int(math.ceil(bounds[i*2+1]-bounds[i*2])/spacing[i])
-            print dim[i]
+            #print dim[i]
         white_image.SetDimensions(dim)
         white_image.SetExtent(0, dim[0]-1, 0, dim[1]-1, 0, dim[2]-1)
         origin = [bounds[0]+spacing[0]/2, bounds[2]+spacing[1]/2, bounds[4]+spacing[2]/2]
