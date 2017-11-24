@@ -5,8 +5,8 @@ import os
 
 base_path = r'.\image_data\\'
 
-for case in os.listdir(base_path):
-    if case not in [""]:
+for i, case in enumerate(os.listdir(base_path)):
+    if i+1 >= 1:
         for side in ["upper", "lower"]:
             ########################
             #### 0. READ MESHES ####
@@ -47,7 +47,7 @@ for case in os.listdir(base_path):
             cropped_poly = meshOp.crop_mesh_maximum(dec_poly_data, dec_poly_data.GetBounds()[0],
                                             dec_poly_data.GetBounds()[1],
                                             dec_poly_data.GetBounds()[2], dec_poly_data.GetBounds()[3],
-                                            dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5], 0.65, 0.90, 0.0125)
+                                            dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5], 0.15, 0.90, 0.0125)
 
 
 
@@ -66,6 +66,7 @@ for case in os.listdir(base_path):
             # get outer edges
 
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
+            g_edge = meshOp.compute_center_of_mass(edge_poly)
             edge_poly,trans = meshOp.translate_to_xy_y_centered(edge_poly)
             original_aligned_poly, transform = meshOp.translate_tuple(reoriented_polydata, trans)
             suggest_line, _ = meshOp.transform(suggest_line, transform)

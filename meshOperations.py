@@ -45,6 +45,22 @@ class MeshOperations:
         reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
         tmp_transform.Concatenate(trans)
 
+        # check if the mesh is still on its head and rotate if that is the case
+        featureEdges = vtk.vtkFeatureEdges()
+
+        featureEdges.SetInputData(reoriented_poly_data)
+        featureEdges.BoundaryEdgesOn()
+        featureEdges.FeatureEdgesOff()
+        featureEdges.ManifoldEdgesOff()
+        featureEdges.NonManifoldEdgesOff()
+        featureEdges.Update()
+        edge_poly = featureEdges.GetOutput()
+        gr_edge = self.compute_center_of_mass(edge_poly)
+
+        if gr_edge[2] > 0:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
+            reoriented_poly_data, trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
+            tmp_transform.Concatenate(trans)
+
         return reoriented_poly_data, tmp_transform
 
     def translate_to_xy_y_centered(self, input_poly):
@@ -149,7 +165,7 @@ class MeshOperations:
         :param poly_data_input: vtkPolyData to be rotated
         :param rot_axis: rotation axis as a vector
         :param angle: rotation angle
-        :return: rotated vtkPolyData
+        :return: rotated vtkPolyData and vtkTransformed used
         """
         transform = vtk.vtkTransform()
         transform.RotateWXYZ(angle, rot_axis)
@@ -162,7 +178,7 @@ class MeshOperations:
             transform_filter.SetInputData(poly_data_input)
         transform_filter.Update()
 
-        return transform_filter.GetOutput()
+        return transform_filter.GetOutput(), transform
 
     def rotate(self, poly_data_input, old_vect, new_vect):
         """
