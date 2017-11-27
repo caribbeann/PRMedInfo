@@ -6,7 +6,7 @@ import os
 base_path = r'.\image_data\\'
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 1:
+    if i+1 >= 19:
         for side in ["upper", "lower"]:
             ########################
             #### 0. READ MESHES ####
@@ -67,7 +67,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
             g_edge = meshOp.compute_center_of_mass(edge_poly)
-            edge_poly,trans = meshOp.translate_to_xy_y_centered(edge_poly)
+            edge_poly,trans = meshOp.translate_to_xy_x_centered(edge_poly)
             original_aligned_poly, transform = meshOp.translate_tuple(reoriented_polydata, trans)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 

@@ -21,6 +21,40 @@ class MeshOperations:
 
         return polydata
 
+    def align_to_z_axis(self, polydata_input):
+        """
+        Align the mesh so that the Z axis points along the smalles dimension of the mesh
+        :param polydata_input: vtkPolyData to be aligned
+        :return: transformed vtkPolyData and used transformation
+        """
+
+        tmp_transform = vtk.vtkTransform()
+        tmp_transform.PostMultiply()
+
+        pca_dict1 = self.compute_pca(polydata_input)
+        reoriented_poly_data, trans = self.rotate(polydata_input, [0.0, 0.0, 1.0], pca_dict1['eigenvectors'][2])
+        tmp_transform.Concatenate(trans)
+        reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
+        tmp_transform.Concatenate(trans)
+
+        # check if the mesh is still on its head and rotate if that is the case
+        featureEdges = vtk.vtkFeatureEdges()
+
+        featureEdges.SetInputData(reoriented_poly_data)
+        featureEdges.BoundaryEdgesOn()
+        featureEdges.FeatureEdgesOff()
+        featureEdges.ManifoldEdgesOff()
+        featureEdges.NonManifoldEdgesOff()
+        featureEdges.Update()
+        edge_poly = featureEdges.GetOutput()
+        gr_edge = self.compute_center_of_mass(edge_poly)
+
+        if gr_edge[2] > 0:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
+            reoriented_poly_data, trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
+            tmp_transform.Concatenate(trans)
+
+        return reoriented_poly_data, tmp_transform
+
     def align_to_axes(self, polydata_input):
         """
         Align the axes of the scene with the main axes of the object by PCA
@@ -63,13 +97,49 @@ class MeshOperations:
 
         return reoriented_poly_data, tmp_transform
 
-    def translate_to_xy_y_centered(self, input_poly):
+    def is_mesh_with_basis_on_head(self, input_poly_data):
+        """
+        Checks if a mesh that has a basis (i guess these are the gips meshes) is rotated.
+        i.e. if the Z axis points toward the brain and not toward the floor as we want it to
+        :param input_poly_data: vtkPolyData to be analyzed
+        :return: True if needs rotation
+                False if its pointing correctly
+        """
+        featureEdges = vtk.vtkFeatureEdges()
+
+        featureEdges.SetInputData(input_poly_data)
+        featureEdges.BoundaryEdgesOn()
+        featureEdges.FeatureEdgesOff()
+        featureEdges.ManifoldEdgesOff()
+        featureEdges.NonManifoldEdgesOff()
+        featureEdges.Update()
+        edge_poly = featureEdges.GetOutput()
+        gr_edge = self.compute_center_of_mass(edge_poly)
+        gr_input = self.compute_center_of_mass(input_poly_data)
+        if gr_edge[2] > gr_input[2]:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
+            return True
+        return False
+
+    def flatten(self, input_poly):
+
+        transform = vtk.vtkTransform()
+        transform.Scale(1,1,0)
+
+        filter = vtk.vtkTransformPolyDataFilter()
+        filter.SetTransform(transform)
+        filter.SetInputData(input_poly)
+
+        filter.Update()
+
+        return filter.GetOutput(), transform
+
+    def translate_to_xy_x_centered(self, input_poly):
         """
         Translates a mesh in the XY plane (Zmin=0) in the Y positive half and Y axis passing through the center of mass
         :param input_poly: vtkPolyData to be translated
         :return: translated vtkPolyData and the transformation vector used to translate
         """
-        tran1 = [0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4]]
+        tran1 = [-input_poly.GetBounds()[0], 0, -input_poly.GetBounds()[4]]
         mesh, trans = self.translate(input_poly, 0, -input_poly.GetBounds()[2], -input_poly.GetBounds()[4])
 
         x, y, z = self.compute_center_of_mass(mesh)
@@ -82,8 +152,8 @@ class MeshOperations:
         tran4 = [0, 0, 0]
         mesh, trans = self.translate(mesh, 0, 0, 0)
 
-        tran5 = [0, -mesh.GetBounds()[2], 0]
-        mesh, trans = self.translate(mesh, 0, -mesh.GetBounds()[2], 0)
+        tran5 = [-mesh.GetBounds()[0], 0, 0]
+        mesh, trans = self.translate(mesh, -mesh.GetBounds()[0], 0, 0)
 
         trans = tran1+tran2+tran3+tran4+tran5
 
@@ -341,7 +411,25 @@ class MeshOperations:
         clipper.Update()
         return clipper.GetClippedOutput()
 
-    def crop_mesh_maximum(self, poly_input, xmin, xmax, ymin, ymax, zmin, zmax, min_percent, max_percent, percent_step):
+    def check_if_enough_is_left(self, original_mesh, cropped_mesh, percentage):
+        """
+        Checks if after cropping of a mesh, the cropping has not caused the mesh to reduce a lot in size due to for example
+        local maxima on the original mesh that still act as a single component when checked.
+        With this method we check if a certain percentage of the X and Y dimensions of the mesh are still there
+        :param original_mesh:
+        :param cropped_mesh:
+        :param percentage:
+        :return:
+        """
+        bounds_o = original_mesh.GetBounds()
+        bounds_c = cropped_mesh.GetBounds()
+
+        if (abs(bounds_c[0]) + abs(bounds_c[1])) >= percentage *(abs(bounds_o[0]) + abs(bounds_o[1])) and \
+                        (abs(bounds_c[2]) + abs(bounds_c[3])) >= percentage * (abs(bounds_o[2]) + abs(bounds_o[3])):
+            return True
+        return False
+
+    def crop_mesh_maximum(self, poly_input, xmin, xmax, ymin, ymax, zmin, zmax, min_percent, max_percent, percent_step, keep_percentage):
         """
         Crop a given mesh but with constraints on the maximum crop. The percentages represent parts of total Z height
         of the mesh
@@ -355,6 +443,7 @@ class MeshOperations:
         :param min_percent: below this amount, the mesh will not be kept
         :param max_percent: above this amount, cropping is not allowed anymore
         :param percent_step:
+        :param keep_percentage: how much of the X and Y dimensions of the original mesh to keep
         :return:
         """
         con_filter = vtk.vtkPolyDataConnectivityFilter()
@@ -369,7 +458,8 @@ class MeshOperations:
             con_filter.SetInputData(cropped_poly_data)
             con_filter.SetExtractionModeToAllRegions()
             con_filter.Update()
-            if con_filter.GetNumberOfExtractedRegions() == 1:
+            if con_filter.GetNumberOfExtractedRegions() == 1 and \
+                    self.check_if_enough_is_left(poly_input, cropped_poly_data, keep_percentage):
                 if i > last_biggest_percentage:
                     last_biggest_percentage = i
                     last_crop_poly = cropped_poly_data
@@ -509,10 +599,10 @@ class MeshOperations:
 
         cells_edges = vtk.vtkIdList()
 
-        line_length = abs(input_poly.GetBounds()[3]) + abs(input_poly.GetBounds()[1])
+        line_length = 2*abs(input_poly.GetBounds()[3]) + 2*abs(input_poly.GetBounds()[1])
         start_point = [0, 0, 0]
         end_points = []
-        for angle in np.linspace(math.pi / 6, math.pi * 5 / 6, 120):  # from 30deg to 150deg in 1 deg steps
+        for angle in np.linspace(0, 2* math.pi, 360):  # from 30deg to 150deg in 1 deg steps
             end_points.append(
                 [start_point[0] + line_length * math.cos(angle), start_point[1] + line_length * math.sin(angle),
                  start_point[2]])
