@@ -34,7 +34,9 @@ class Renderer:
 
         iren.SetRenderWindow(ren_win)
 
-        self.ren.SetBackground(0.1, 0.1, 0.1)
+        self.ren_win = ren_win
+
+        #self.ren.SetBackground(0.1, 0.1, 0.1)
 
         # enable user interface interactor
 
@@ -43,6 +45,31 @@ class Renderer:
         ren_win.Render()
 
         iren.Start()
+
+
+
+    def add_camera(self, position = [0, 0, 20], focal_point = [0, 0 ,0]):
+        """
+        Adds a camera to this renderer
+        :param position: position coordinates xyz of the camera
+        :param focal_point: point coordinates xyz that the camrea looks at
+        :return: camera created using the given parameters
+        """
+        camera = vtk.vtkCamera()
+        camera.SetPosition(position)
+        camera.SetFocalPoint(focal_point)
+
+        self.ren.SetActiveCamera(camera)
+
+        return camera
+
+
+    def get_ren_win(self):
+        """
+        Getter function to obtain the rendering window
+        :return:
+        """
+        return self.ren_win
 
     def add_actor(self, input_poly_data, **kwargs):
         """
@@ -80,3 +107,11 @@ class Renderer:
 
         self.ren.AddActor(actor)
         return actor
+
+    def set_background(self, r, g, b):
+        """
+        Sets the color of the rendering background to the given color
+        :param color: [r, g, b] float
+        :return:
+        """
+        self.ren.SetBackground(r, g ,b)
