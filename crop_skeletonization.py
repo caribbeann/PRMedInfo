@@ -2,14 +2,17 @@ import renderer
 import meshOperations
 import decimator
 import os
+import vtk
 
 base_path = r'.\image_data\\'
 keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 1:
+    if i+1 >= 11:
         for side in ["upper", "lower"]:
+
+
             ########################
             #### 0. READ MESHES ####
             ########################
@@ -17,6 +20,8 @@ for i, case in enumerate(os.listdir(base_path)):
 
             original_polydata = meshOp.read(base_path + case+ "//{}JawMesh.obj".format(side))
             suggest_line = meshOp.read(base_path + case + "//suggest_alveolarRidgeLine_{}_coarse.obj".format(side))
+
+
 
             ########################
             ##### 1. ALIGN MESH ####
@@ -27,6 +32,8 @@ for i, case in enumerate(os.listdir(base_path)):
             reoriented_polydata, transform = meshOp.translate_to_origin(original_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
+
+
             # aling along the smallest dimension in any case
 
             reoriented_polydata, transform = meshOp.align_to_z_axis(reoriented_polydata)
@@ -36,6 +43,22 @@ for i, case in enumerate(os.listdir(base_path)):
             reoriented_polydata, transform = meshOp.translate_to_xy_plane(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
+            # do the gradient stuff
+            bounds = reoriented_polydata.GetBounds()
+            s_elev = vtk.vtkElevationFilter()
+            s_elev.SetInputData(reoriented_polydata)
+            s_elev.SetHighPoint(0, 0, bounds[5])
+            s_elev.SetLowPoint(0, 0, bounds[4])
+            # s_elev.SetScalarRange(bounds[4],bounds[5])
+            s_elev.Update()
+
+            grad_filter = vtk.vtkGradientFilter()
+            grad_filter.SetInputData(s_elev.GetOutput())
+            grad_filter.Update()
+            gradient = grad_filter.GetOutput()
+
+
+            # CONTINUE FROM HERE WITH REPLACING THE WORKING MESH WITH THE GRADIENT MESH
             #####################################
             #### 2. SIMPLIFY (decimate) MESH ####
             #####################################
