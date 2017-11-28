@@ -619,21 +619,21 @@ class MeshOperations:
         for i in range(end_points.shape[0]):
 
             edge_locator.FindCellsAlongLine(start_point, end_points[i], 0.001, cells_edges)
-            pid1 = vtk.vtkIdList()  # contains the point ids of the first intersection
-            pid2 = vtk.vtkIdList()
-            if cells_edges.GetNumberOfIds() == 2:
+            pid = vtk.vtkIdList()  # contains the point ids of the first cell intersection
+            p_intersections = []
+            pid_list = []
+            if cells_edges.GetNumberOfIds() >= 2:
                 # get only the first two intersection points
-                id1 = cells_edges.GetId(0)
-                id2 = cells_edges.GetId(1)
-                input_poly.GetCellPoints(id1, pid1)
-                input_poly.GetCellPoints(id2, pid2)
+                for i in range(cells_edges.GetNumberOfIds()):
 
-                p_int_1 = np.add(np.array(input_poly.GetPoint(pid1.GetId(0))),
-                                 np.array(input_poly.GetPoint(pid1.GetId(1)))) / 2
-                p_int_2 = np.add(np.array(input_poly.GetPoint(pid2.GetId(0))),
-                                 np.array(input_poly.GetPoint(pid2.GetId(1)))) / 2
+                    id = cells_edges.GetId(i)
+                    input_poly.GetCellPoints(id, pid)
+                    pid_list.append(pid)
 
-                p_alv_line = np.add(p_int_1, p_int_2) / 2
+                    p_int = np.add(np.array(input_poly.GetPoint(pid.GetId(0))),
+                                     np.array(input_poly.GetPoint(pid.GetId(1)))) / 2
+                    p_intersections.append(p_int)
+                p_alv_line = np.sum(np.array(p_intersections), axis=0) / len(p_intersections)
                 alv_line_points.append(p_alv_line)
                 skeleton_points.InsertNextPoint(p_alv_line)
 
