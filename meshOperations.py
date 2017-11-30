@@ -585,6 +585,22 @@ class MeshOperations:
 
         return edge_poly
 
+    def smoothen(self, input_poly, iterations, relaxation_factor) :
+        """
+        Smoothens a given polydata as a possible preprocessing
+        :param input_poly: vtkPolyData to smoothen
+        :return: smoothened vtkPolyData
+        """
+        sf = vtk.vtkSmoothPolyDataFilter()
+        sf.SetInputData(input_poly)
+        sf.SetNumberOfIterations(iterations)
+        sf.SetRelaxationFactor(relaxation_factor)
+        sf.FeatureEdgeSmoothingOn()
+        sf.BoundarySmoothingOn()
+        sf.Update()
+
+        return sf.GetOutput()
+
     def get_edge_skeleton(self, input_poly):
         """
         Computes the skeleton the mesh

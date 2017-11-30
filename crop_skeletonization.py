@@ -9,7 +9,7 @@ keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 2:
+    if i+1 >= 10:
         for side in ["upper", "lower"]:
 
 
@@ -92,7 +92,7 @@ for i, case in enumerate(os.listdir(base_path)):
             #############################
 
             # get outer edges
-
+            dec_poly_data = meshOp.smoothen(dec_poly_data, 15, 0.01)
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
             edge_poly, _ = meshOp.flatten(edge_poly)  # make it flat
             #edge_poly,trans = meshOp.translate_to_xy_x_centered(edge_poly)
