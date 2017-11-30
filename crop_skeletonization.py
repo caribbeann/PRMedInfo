@@ -9,7 +9,7 @@ keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 11:
+    if i+1 >= 2:
         for side in ["upper", "lower"]:
 
 

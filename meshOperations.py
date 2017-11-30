@@ -1,7 +1,7 @@
 import vtk
 import math
 import numpy as np
-
+from sklearn.cluster import KMeans
 
 class MeshOperations:
 
@@ -602,7 +602,7 @@ class MeshOperations:
         line_length = 2*abs(input_poly.GetBounds()[3]) + 2*abs(input_poly.GetBounds()[1])
         start_point = [0, 0, 0]
         end_points = []
-        for angle in np.linspace(0, 2* math.pi, 360):  # from 30deg to 150deg in 1 deg steps
+        for angle in np.linspace(0, 2* math.pi, 72):  # every 5 degrees in full circle
             end_points.append(
                 [start_point[0] + line_length * math.cos(angle), start_point[1] + line_length * math.sin(angle),
                  start_point[2]])
@@ -623,7 +623,7 @@ class MeshOperations:
             p_intersections = []
             pid_list = []
             if cells_edges.GetNumberOfIds() >= 2:
-                # get only the first two intersection points
+
                 for i in range(cells_edges.GetNumberOfIds()):
 
                     id = cells_edges.GetId(i)
@@ -633,12 +633,20 @@ class MeshOperations:
                     p_int = np.add(np.array(input_poly.GetPoint(pid.GetId(0))),
                                      np.array(input_poly.GetPoint(pid.GetId(1)))) / 2
                     p_intersections.append(p_int)
-                p_alv_line = np.sum(np.array(p_intersections), axis=0) / len(p_intersections)
-                alv_line_points.append(p_alv_line)
-                skeleton_points.InsertNextPoint(p_alv_line)
+                parr = np.array(p_intersections)
+                kmeans = KMeans(n_clusters=2, random_state=0).fit(parr)
 
-                poly_line.GetPointIds().SetId(counter, counter)
-                counter += 1
+                if len(kmeans.labels_) >= 2:
+
+                    mean_cluster1 = np.sum(parr[kmeans.labels_== 0], axis=0)/parr[kmeans.labels_== 0].shape[0]
+                    mean_cluster2 = np.sum(parr[kmeans.labels_== 1], axis=0)/parr[kmeans.labels_== 1].shape[0]
+
+                    p_alv_line = (mean_cluster1+mean_cluster2)/2
+                    alv_line_points.append(p_alv_line)
+                    skeleton_points.InsertNextPoint(list(p_alv_line))
+
+                    poly_line.GetPointIds().SetId(counter, counter)
+                    counter += 1
         poly_line.GetPointIds().SetNumberOfIds(counter - 1)
         whole_line.InsertNextCell(poly_line)
         skeleton = vtk.vtkPolyData()
