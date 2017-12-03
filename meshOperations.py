@@ -1,6 +1,7 @@
 import vtk
 import math
 import numpy as np
+from bresenham import bresenham
 from sklearn.cluster import KMeans
 
 class MeshOperations:
@@ -825,7 +826,7 @@ class MeshOperations:
 
         return polydata_final
 
-    def place_skeleton_on_original_mesh(self, original_poly, skeleton_points):
+    def place_skeleton_on_original_mesh(self, original_poly, skeleton_points, line_accuracy, percentage_of_radius, percentage_of_radius_outwards):
         """
         Places the computed alveolar line points on the mesh by intersecting vertical lines with the original 3D mold
         to find intersection points and therefore to find elevations
@@ -834,11 +835,70 @@ class MeshOperations:
         :return: vtkPolyData of the final skeleton
         """
 
+        def find_higher_elevation(elevation_poly, original_elevation, original_pt, point_list, section, l_length):
+
+            locator = vtk.vtkOBBTree()
+            locator.SetDataSet(elevation_poly)
+            locator.BuildLocator()
+            int_points = vtk.vtkPoints()
+            int_cells = vtk.vtkIdList()
+            max_elevation = original_elevation
+            max_pt = original_pt
+            c_p_ids = vtk.vtkIdList()
+            for k in range(int(point_list.shape[0]*section)):
+
+                sp = [point_list[k][0],point_list[k][1], 0]
+                ep = [sp[0], sp[1], sp[2] + l_length]
+                locator.IntersectWithLine(sp, ep, int_points, int_cells)
+
+                if int_points.GetNumberOfPoints()>=1:
+                    elevation_poly.GetCellPoints(int_cells.GetId(int_cells.GetNumberOfIds() - 1), c_p_ids)
+                    e0 = elevation_poly.GetPointData().GetArray("Elevation").GetValue(c_p_ids.GetId(0))
+                    e1 = elevation_poly.GetPointData().GetArray("Elevation").GetValue(c_p_ids.GetId(1))
+                    e2 = elevation_poly.GetPointData().GetArray("Elevation").GetValue(c_p_ids.GetId(2))
+
+                    elevation = max(e0, e1, e2)
+
+                    if elevation > max_elevation:
+                        max_elevation = elevation
+                        max_pt = int_points.GetPoint(int_points.GetNumberOfPoints() - 1)
+
+
+            return max_pt
+
+        def find_points(xs, xe, ys, ye, nr):
+            x = np.linspace(xs, xe, nr)
+            y = np.linspace(ys, ye, nr)
+            xv, yv = np.meshgrid(x, y)
+
+            points = np.zeros((nr,2))
+
+            for l in range(nr):
+                points[l,0] = xv[l, l]
+                points[l,1] = yv[l, l]
+            return points
+
+        def extend_line(points, amount, accuracy):
+            difx = points[0][0] - points[points.shape[0] - 1][0]
+            dify = points[0][1] - points[points.shape[0] - 1][1]
+            end_point_other_direction = [points[0][0] + difx, points[0][1] + dify]
+
+            new_points = find_points(points[0][0], end_point_other_direction[0], points[0][1], end_point_other_direction[1], accuracy)
+
+            new_points = new_points[:int(amount*new_points.shape[0]), :]
+
+            points_final = np.concatenate([points, new_points], axis=0)
+
+            return points_final
+
+
+        elev_poly = self.compute_elevation(original_poly)
+
         original_locator = vtk.vtkOBBTree()
-        original_locator.SetDataSet(original_poly)
+        original_locator.SetDataSet(elev_poly)
         original_locator.BuildLocator()
 
-        line_length = abs(original_poly.GetBounds()[5]) + 1
+        line_length = abs(elev_poly.GetBounds()[5]) + 1
 
         skeleton_points_final = vtk.vtkPoints()  # here we add the points that we find
         intersection_points = vtk.vtkPoints()
@@ -847,15 +907,37 @@ class MeshOperations:
         poly_line_final = vtk.vtkPolyLine()
         poly_line_final.GetPointIds().SetNumberOfIds(len(skeleton_points))
         counter = 0
+        cell_point_ids = vtk.vtkIdList()
+
         for alv_line_point in skeleton_points:
             original_locator.IntersectWithLine(alv_line_point, [alv_line_point[0], alv_line_point[1],
                                                                 alv_line_point[2] + line_length], intersection_points,
                                                intersection_cells)
 
             if intersection_points.GetNumberOfPoints() >= 1:
-                p_int = intersection_points.GetPoint(intersection_points.GetNumberOfPoints() - 1)
+                p_int = intersection_points.GetPoint(intersection_points.GetNumberOfPoints() - 1) # get the last point (it coincides with the surface point)
+                elev_poly.GetCellPoints(intersection_cells.GetId(intersection_cells.GetNumberOfIds() - 1), cell_point_ids)
 
-                pid = skeleton_points_final.InsertNextPoint(p_int)
+                # find out the approx (mean) elevation for the intersection point(cell)
+                elev0 = elev_poly.GetPointData().GetArray("Elevation").GetValue(cell_point_ids.GetId(0))
+                elev1 = elev_poly.GetPointData().GetArray("Elevation").GetValue(cell_point_ids.GetId(1))
+                elev2 = elev_poly.GetPointData().GetArray("Elevation").GetValue(cell_point_ids.GetId(2))
+
+                elev = max(elev0, elev1, elev2)
+                # check the profile "perpendicular to the alveolar line for maxima
+
+                com = self.compute_center_of_mass(elev_poly) # center of mass
+
+                # point_list_com = list(bresenham(int(alv_line_point[0]), int(alv_line_point[1]), int(com[0]), int(com[1])))
+                point_list_com = find_points(alv_line_point[0], com[0], alv_line_point[1], com[1], line_accuracy)
+                # point_list_com = np.array(point_list_com)
+
+                point_list_com = extend_line(point_list_com, percentage_of_radius_outwards, line_accuracy)
+                p_int_new = find_higher_elevation(elev_poly,
+                                                  elev,
+                                                  p_int, point_list_com, percentage_of_radius, line_length)
+
+                pid = skeleton_points_final.InsertNextPoint(p_int_new)
                 poly_line_final.GetPointIds().SetId(counter, pid)
 
                 counter += 1

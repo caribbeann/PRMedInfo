@@ -21,8 +21,6 @@ for i, case in enumerate(os.listdir(base_path)):
             original_polydata = meshOp.read(base_path + case+ "//{}JawMesh.obj".format(side))
             suggest_line = meshOp.read(base_path + case + "//suggest_alveolarRidgeLine_{}_coarse.obj".format(side))
 
-
-
             ########################
             ##### 1. ALIGN MESH ####
             ########################
@@ -33,15 +31,28 @@ for i, case in enumerate(os.listdir(base_path)):
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
 
-
             # align along the smallest dimension in any case
 
             reoriented_polydata, transform = meshOp.align_to_z_axis(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
+            if "Gips" not in case and side == "lower":
+                reoriented_polydata, t1 = meshOp.rotate_angle(reoriented_polydata, [1, 0, 0], 180)
+                suggest_line, _ = meshOp.transform(suggest_line, t1)
+
+                reoriented_polydata, t2 = meshOp.translate_to_xy_plane(reoriented_polydata)
+
+                suggest_line, _ = meshOp.transform(suggest_line, t2)
+
+                reoriented_polydata, transform = meshOp.translate_to_origin(reoriented_polydata)
+                suggest_line, _ = meshOp.transform(suggest_line, transform)
+
             # make z min 0 in any case
             reoriented_polydata, transform = meshOp.translate_to_xy_plane(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
+
+            # keep an unremoved-tongue poly data for later viewing
+            original = reoriented_polydata
 
             # remove tongue, try different thresholds
             reoriented_polydata = meshOp.remove_tongue(reoriented_polydata, threshold=0.02)
@@ -80,19 +91,16 @@ for i, case in enumerate(os.listdir(base_path)):
             #############################
 
             # get outer edges
-            #dec_poly_data = meshOp.smoothen(dec_poly_data, 15, 0.01)
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
-            edge_poly = meshOp.smoothen(edge_poly, 15, 0.01)
+            # edge_poly = meshOp.smoothen(edge_poly, 15, 0.01)
             edge_poly, _ = meshOp.flatten(edge_poly)  # make it flat
-            #edge_poly,trans = meshOp.translate_to_xy_x_centered(edge_poly)
-            #original_aligned_poly, transform = meshOp.translate_tuple(reoriented_polydata, trans)
-            #suggest_line, _ = meshOp.transform(suggest_line, transform)
+
 
             skeleton, skeleton_points = meshOp.get_edge_skeleton(edge_poly)
 
             # find intersection of vertical lines with the original aligned mesh
 
-            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points)
+            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points, 100, 0.15, 0.15)
 
 
             ###############################
@@ -100,7 +108,7 @@ for i, case in enumerate(os.listdir(base_path)):
             ###############################
 
             rend = renderer.Renderer()
-            rend.add_actor(reoriented_polydata, color=[1,1,1], wireframe= False)
+            rend.add_actor(original, color=[1,1,1], wireframe= False)
             rend.add_actor(suggest_line, color=[1,0,0], wireframe=False, linewidth=4)
             rend.add_actor(skeleton_final, color = [0,0,1], wireframe=False, linewidth=6)
 
