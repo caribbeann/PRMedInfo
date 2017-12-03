@@ -62,7 +62,7 @@ class Smoothing:
         """
         npPoints = self.smooth(polydata,nbIter,threshold)
         meshOp = meshOperations.MeshOperations()
-        return meshOp.numpyArrayToPolyData(npPoints)
+        return meshOp.numpy_array_to_poly_data(npPoints)
 
     def weightedCombination(self,polydata,nbIter,threshold):
         """
@@ -87,7 +87,7 @@ class Smoothing:
                 moy = npPoints[i]+(firstPt-npPoints[i])/2
             moys[i]=moy
         meshOp = meshOperations.MeshOperations()
-        return meshOp.numpyArrayToPolyData(moys)
+        return meshOp.numpy_array_to_poly_data(moys)
 
     def meanWeightedCombination(self,polydata,nbIter,threshold):
         """
@@ -111,5 +111,5 @@ class Smoothing:
             else:   
                 moys[i]=pt
         meshOp = meshOperations.MeshOperations()
-        return meshOp.numpyArrayToPolyData(moys)
+        return meshOp.numpy_array_to_poly_data(moys)
 

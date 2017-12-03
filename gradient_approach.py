@@ -7,7 +7,7 @@ meshop = meshop.MeshOperations()
 
 
 
-input_poly_data = meshop.read(r"./image_data/12_FI_01_idealcutline/lowerJawMesh.obj")
+input_poly_data = meshop.read(r"./image_data/06_Gips06/lowerJawMesh.obj")
 ev_dict = meshop.compute_pca(input_poly_data)
 input_poly_data, _ = meshop.rotate(input_poly_data, [0,0,1], ev_dict["eigenvectors"][2])
 
@@ -37,6 +37,7 @@ tubes.Update()
 
 gradients = vtk.vtkGradientFilter()
 gradients.SetInputData(s_elev.GetOutput())
+gradients.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS, "Elevation")
 gradients.Update()
 
 vectors = vtk.vtkAssignAttribute()

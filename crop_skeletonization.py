@@ -9,7 +9,7 @@ keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 10:
+    if i+1 >= 1:
         for side in ["upper", "lower"]:
 
 
@@ -34,7 +34,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
 
-            # aling along the smallest dimension in any case
+            # align along the smallest dimension in any case
 
             reoriented_polydata, transform = meshOp.align_to_z_axis(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
@@ -43,22 +43,10 @@ for i, case in enumerate(os.listdir(base_path)):
             reoriented_polydata, transform = meshOp.translate_to_xy_plane(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
-            # do the gradient stuff
-            bounds = reoriented_polydata.GetBounds()
-            s_elev = vtk.vtkElevationFilter()
-            s_elev.SetInputData(reoriented_polydata)
-            s_elev.SetHighPoint(0, 0, bounds[5])
-            s_elev.SetLowPoint(0, 0, bounds[4])
-            # s_elev.SetScalarRange(bounds[4],bounds[5])
-            s_elev.Update()
-
-            grad_filter = vtk.vtkGradientFilter()
-            grad_filter.SetInputData(s_elev.GetOutput())
-            grad_filter.Update()
-            gradient = grad_filter.GetOutput()
+            # remove tongue, try different thresholds
+            reoriented_polydata = meshOp.remove_tongue(reoriented_polydata, threshold=0.02)
 
 
-            # CONTINUE FROM HERE WITH REPLACING THE WORKING MESH WITH THE GRADIENT MESH
             #####################################
             #### 2. SIMPLIFY (decimate) MESH ####
             #####################################
@@ -92,8 +80,9 @@ for i, case in enumerate(os.listdir(base_path)):
             #############################
 
             # get outer edges
-            dec_poly_data = meshOp.smoothen(dec_poly_data, 15, 0.01)
+            #dec_poly_data = meshOp.smoothen(dec_poly_data, 15, 0.01)
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
+            edge_poly = meshOp.smoothen(edge_poly, 15, 0.01)
             edge_poly, _ = meshOp.flatten(edge_poly)  # make it flat
             #edge_poly,trans = meshOp.translate_to_xy_x_centered(edge_poly)
             #original_aligned_poly, transform = meshOp.translate_tuple(reoriented_polydata, trans)
