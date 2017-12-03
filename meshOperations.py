@@ -615,7 +615,7 @@ class MeshOperations:
         s_elev.SetLowPoint(0, 0, bounds[4])
         s_elev.Update()
 
-        return s_elev.GetOutput
+        return s_elev.GetOutput()
 
     def extract_largest_region(self, input_poly_data):
         """
@@ -640,7 +640,7 @@ class MeshOperations:
         elev = self.compute_elevation(input_poly_data)
 
         gradients = vtk.vtkGradientFilter()
-        gradients.SetInputData(elev.GetOutput())
+        gradients.SetInputData(elev)
         gradients.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS, "Elevation")
         gradients.Update()
 
