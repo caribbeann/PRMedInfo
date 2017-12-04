@@ -2,6 +2,7 @@ import renderer
 import meshOperations
 import decimator
 import os
+import smoothing as sm
 import vtk
 
 base_path = r'.\image_data\\'
@@ -9,8 +10,8 @@ keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 1:
-        for side in ["upper", "lower"]:
+    if i+1 >= 17:
+        for side in ["lower"]:
 
 
             ########################
@@ -31,21 +32,11 @@ for i, case in enumerate(os.listdir(base_path)):
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
 
-            # align along the smallest dimension in any case
+            # align along the smallest dimension in any case and with the Z showing the teeth growth direction
 
-            reoriented_polydata, transform = meshOp.align_to_z_axis(reoriented_polydata)
+            reoriented_polydata, transform, _ = meshOp.align_to_axes(reoriented_polydata)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
-            if "Gips" not in case and side == "lower":
-                reoriented_polydata, t1 = meshOp.rotate_angle(reoriented_polydata, [1, 0, 0], 180)
-                suggest_line, _ = meshOp.transform(suggest_line, t1)
-
-                reoriented_polydata, t2 = meshOp.translate_to_xy_plane(reoriented_polydata)
-
-                suggest_line, _ = meshOp.transform(suggest_line, t2)
-
-                reoriented_polydata, transform = meshOp.translate_to_origin(reoriented_polydata)
-                suggest_line, _ = meshOp.transform(suggest_line, transform)
 
             # make z min 0 in any case
             reoriented_polydata, transform = meshOp.translate_to_xy_plane(reoriented_polydata)
@@ -100,7 +91,10 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # find intersection of vertical lines with the original aligned mesh
 
-            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points, 100, 0.15, 0.15)
+            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points, 100, 0.1, 0.1)
+
+            smoother = sm.Smoothing()
+            #skeleton_final = smoother.polyDataSmoothed(skeleton_final, 5, 5)
 
 
             ###############################

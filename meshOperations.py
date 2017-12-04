@@ -523,8 +523,8 @@ class MeshOperations:
         bounds_o = original_mesh.GetBounds()
         bounds_c = cropped_mesh.GetBounds()
 
-        if (abs(bounds_c[0]) + abs(bounds_c[1])) >= percentage *(abs(bounds_o[0]) + abs(bounds_o[1])) and \
-                        (abs(bounds_c[2]) + abs(bounds_c[3])) >= percentage * (abs(bounds_o[2]) + abs(bounds_o[3])):
+        if (bounds_c[1] - bounds_c[0]) >= percentage *(bounds_o[1] - bounds_o[0]) and \
+                        (bounds_c[3] - bounds_c[2]) >= percentage * (bounds_o[3] - bounds_o[2]):
             return True
         return False
 
@@ -962,7 +962,7 @@ class MeshOperations:
                         max_pt = int_points.GetPoint(int_points.GetNumberOfPoints() - 1)
 
 
-            return max_pt
+            return max_pt, max_elevation
 
         def find_points(xs, xe, ys, ye, nr):
             x = np.linspace(xs, xe, nr)
@@ -976,18 +976,18 @@ class MeshOperations:
                 points[l,1] = yv[l, l]
             return points
 
-        def extend_line(points, amount, accuracy):
+        def extend_line(points, accuracy):
             difx = points[0][0] - points[points.shape[0] - 1][0]
             dify = points[0][1] - points[points.shape[0] - 1][1]
             end_point_other_direction = [points[0][0] + difx, points[0][1] + dify]
 
             new_points = find_points(points[0][0], end_point_other_direction[0], points[0][1], end_point_other_direction[1], accuracy)
 
-            new_points = new_points[:int(amount*new_points.shape[0]), :]
+            #new_points = new_points[:int(amount*new_points.shape[0]), :]
 
             points_final = np.concatenate([points, new_points], axis=0)
 
-            return points_final
+            return new_points
 
 
         elev_poly = self.compute_elevation(original_poly)
@@ -1030,10 +1030,13 @@ class MeshOperations:
                 point_list_com = find_points(alv_line_point[0], com[0], alv_line_point[1], com[1], line_accuracy)
                 # point_list_com = np.array(point_list_com)
 
-                point_list_com = extend_line(point_list_com, percentage_of_radius_outwards, line_accuracy)
-                p_int_new = find_higher_elevation(elev_poly,
+                point_list_out = extend_line(point_list_com, line_accuracy)
+                p_int_new, elev = find_higher_elevation(elev_poly,
                                                   elev,
                                                   p_int, point_list_com, percentage_of_radius, line_length)
+                p_int_new, elev = find_higher_elevation(elev_poly,
+                                                        elev,
+                                                        p_int_new, point_list_out, percentage_of_radius_outwards, line_length)
 
                 pid = skeleton_points_final.InsertNextPoint(p_int_new)
                 poly_line_final.GetPointIds().SetId(counter, pid)
