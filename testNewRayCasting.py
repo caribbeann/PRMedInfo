@@ -7,30 +7,23 @@ import smoothing
 import os
 
 
-
-##############################################################
-################## Part 1 : Preprocessing ####################
-##############################################################
-
-### Load data, find principal components and reorient the data according to these principal components axes
-### The first component will be the x axis and corresponds to the left-right axis
-### The second component will be the y axis and corresponds to the anteroposterior axis
-### The last component will be the z axis and corresponds to the craniocauda axis
-### Then crop the mesh to get rid of the tongue/palatin, to ease the computation
-
 base_path = r'./image_data//'
-keep_percentage_after_crop = 0.6
-crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
     if i+1 >= 1:
         for side in ["upper", "lower"]:
 
+            ##############################################################
+            ################## Part 1 : Preprocessing ####################
+            ##############################################################
 
-            ########################
-            #### 0. READ MESHES ####
-            ########################
+            ### Load data, find principal components and reorient the data according to these principal components axes
+            ### The first component will be the x axis and corresponds to the left-right axis
+            ### The second component will be the y axis and corresponds to the anteroposterior axis
+            ### The last component will be the z axis and corresponds to the craniocauda axis
+            ### Then crop the mesh to get rid of the tongue/palatin, to ease the computation
+
             meshOp = meshOperations.MeshOperations()
 
             polydata = meshOp.read(base_path + case+ "//{}JawMesh.obj".format(side))
@@ -38,125 +31,10 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
             # Reorient data
-            polydata,_ = meshOp.align_to_axes(polydata)
-            polydata,_ = meshOp.translate_to_origin(polydata)
-            gravity = meshOp.compute_center_of_mass(polydata)
-            bounds = polydata.GetBounds()
+            polydata,trans,gingiva = meshOp.align_to_axes(polydata,False)
+            gingivaGravity = meshOp.compute_center_of_mass(gingiva)
+            bounds = gingiva.GetBounds()
 
-            #check if y correct
-            front,_ = meshOp.crop_mesh(polydata, bounds[0], bounds[1], gravity[1], bounds[3], bounds[4], bounds[5])
-            back,_ = meshOp.crop_mesh(polydata, bounds[0], bounds[1], bounds[2], gravity[1], bounds[4], bounds[5])
-            frBounds = front.GetBounds()
-            bkBounds = back.GetBounds()
-
-
-            if frBounds[1]-frBounds[0]>bkBounds[1]-bkBounds[0]:
-                print "flip y"
-                polydata,_ = meshOp.rotate_angle(polydata,[0,0,1],180)
-
-
-            dec = vtk.vtkDecimatePro()
-            dec.SetInputData(polydata)
-            dec.SetTargetReduction(0.001)
-            dec.PreserveTopologyOff()
-            dec.SplittingOn()
-            dec.BoundaryVertexDeletionOn()
-            dec.Update()
-
-
-
-            # compute curvature value
-            curv = vtk.vtkCurvatures()
-            curv.SetInputData(dec.GetOutput())
-            curv.SetCurvatureTypeToMean()
-            curv.Update()
-
-            # get rid of too high and too low curvature (the interest points are in range [0,1])
-            thres = vtk.vtkThresholdPoints()
-            thres.SetInputConnection(curv.GetOutputPort())
-            thres.ThresholdBetween(0,1)
-            thres.Update()
-
-
-            # there are still too many points (with flat points as well), need to get rid of them by using mean and std
-            scalarValues = thres.GetOutput().GetPointData().GetScalars()
-            vals = np.zeros(scalarValues.GetNumberOfTuples())
-            for i in range (0, scalarValues.GetNumberOfTuples()):
-                vals[i] = scalarValues.GetTuple(i)[0]
-
-            valMean =  np.mean(vals)
-            stdev = np.std(vals)
-
-            thres2 = vtk.vtkThresholdPoints()
-            thres2.SetInputConnection(thres.GetOutputPort())
-            thres2.ThresholdBetween(valMean-2*stdev,valMean+2*stdev)
-            thres2.Update()
-
-
-            # the result is a cloud of points, need to build a polydata, but only when points are close enough to one other
-            randomDelaunay = vtk.vtkDelaunay2D()
-            randomDelaunay.SetInputConnection(thres2.GetOutputPort())
-            # if there are not many points, increase a bit the radius
-            if thres2.GetOutput().GetNumberOfPoints() < 10000:
-                randomDelaunay.SetAlpha(0.3) #radius max of a point to connect with another one
-            else:
-                randomDelaunay.SetAlpha(0.2)
-            randomDelaunay.Update()
-
-
-            # get biggest component
-            con_filter = vtk.vtkPolyDataConnectivityFilter()
-            con_filter.SetExtractionModeToLargestRegion()
-            con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
-            con_filter.Update()
-            newpolydata = vtk.vtkPolyData()
-            newpolydata.DeepCopy(con_filter.GetOutput())
-
-            newBounds = newpolydata.GetBounds()
-
-            # if the teeth are disconnected, only a part has been found, need to add other big regions as well
-            if newpolydata.GetNumberOfCells()<3000 or newBounds[1]-newBounds[0]<0.6*(bounds[1]-bounds[0]):
-                con_filter = vtk.vtkPolyDataConnectivityFilter()
-                con_filter.SetExtractionModeToAllRegions()
-                con_filter.ColorRegionsOn()
-                con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
-                con_filter.ScalarConnectivityOff()
-                con_filter.Update()
-
-                nbRegions = con_filter.GetNumberOfExtractedRegions()
-                con_filter.InitializeSpecifiedRegionList ()
-
-                previousCellNb = 0
-
-                for i in range (0, nbRegions):
-                    con_filter.SetExtractionModeToSpecifiedRegions()
-                    con_filter.AddSpecifiedRegion(i) # add a region to the selection
-                    con_filter.Update()
-                    nbCells = con_filter.GetOutput().GetNumberOfCells()
-                    if nbCells-previousCellNb<200: # get only big regions
-                        con_filter.DeleteSpecifiedRegion(i) # do not keep the region (delete from selection)
-                    previousCellNb = nbCells #contains all cells except the ones from deleted regions
-                newpolydata.DeepCopy(con_filter.GetOutput())
-
-
-
-            newGravity = meshOp.compute_center_of_mass(newpolydata)
-
-            # the upper part of teeth has been extracted, as the mesh is centered on the center of mass of initial polydata
-            # if the center of mass of the upper part is above, the mesh is correctly oriented, otherwise, need to rotate around y
-            # to have z facing the good direction
-            if newGravity[2]<0:
-                print "flip z"
-                newpolydata = meshOp.rotate_angle(newpolydata,[0,1,0],180)
-                polydata = meshOp.rotate_angle(polydata, [0, 1, 0], 180)
-
-
-            rend = renderer.Renderer()
-            rend.add_actor(edge_poly, color=[1,1,1], wireframe= False)
-            rend.add_actor(newpolydata, color=[1,0,1], wireframe= False)
-            rend.render()
-
-            bounds = polydata.GetBounds()
 
             ##############################################################
             ################### Part 2 : "Ray casting" ###################
@@ -166,9 +44,9 @@ for i, case in enumerate(os.listdir(base_path)):
             ### The planes will intersect with the polydata on some points, and for each plane the point with the highest z is computed
             ### All points with highest z components are returned by findPoints
 
-            center = [newGravity[0], newGravity[1], bounds[5]]
-            rayC = raycasting.RayCasting(poly_data=newpolydata)
-            points = rayC.findPoints(center, edge_poly,200)
+            center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
+            rayC = raycasting.RayCasting(poly_data=gingiva)
+            points = rayC.findPoints(center,True)
 
             ##############################################################
             ################### Part 3 : Postprocessing ##################

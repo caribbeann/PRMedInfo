@@ -185,14 +185,10 @@ class MeshOperations:
         # to have z facing the good direction
         if newGravity[2] < 0:
             print "flip z"
-            newpolydata,trans = self.rotate_angle(upperGingiva, [0, 1, 0], 180)
+            upperGingiva,_ = self.rotate_angle(upperGingiva, [0, 1, 0], 180)
             reoriented_poly_data,trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
             tmp_transform.Concatenate(trans)
 
-
-        # if gr_edge[2] > 0:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
-        #     reoriented_poly_data, trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
-        #     tmp_transform.Concatenate(trans)
 
         return reoriented_poly_data, tmp_transform, upperGingiva
 
