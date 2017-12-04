@@ -56,14 +56,12 @@ class MeshOperations:
 
         return reoriented_poly_data, tmp_transform
 
-    def align_to_axes(self, polydata_input):
+    def align_to_axes(self, polydata_input, skip_gingiva = True):
         """
-        Align the axes of the scene with the main axes of the object by PCA
+        Align the axes of the scene with the main axes of the object by PCA, for lower mesh also detects upper part of gingiva
         :param polydata_input: mesh to be aligned
-        :return: aligned vtkPolyData
+        :return: aligned vtkPolyData, corresponding transformation, upper part of gingiva
         """
-        # pca_dict0 = self.compute_pca(polydata_input)
-        # reoriented_poly_data = self.rotate(polydata_input, [0.0, 1.0, 0.0], pca_dict0['eigenvectors'][0])
 
         tmp_transform = vtk.vtkTransform()
         tmp_transform.PostMultiply()
@@ -80,23 +78,123 @@ class MeshOperations:
         reoriented_poly_data, trans = self.translate_to_origin(reoriented_poly_data)
         tmp_transform.Concatenate(trans)
 
-        # check if the mesh is still on its head and rotate if that is the case
-        featureEdges = vtk.vtkFeatureEdges()
 
-        featureEdges.SetInputData(reoriented_poly_data)
-        featureEdges.BoundaryEdgesOn()
-        featureEdges.FeatureEdgesOff()
-        featureEdges.ManifoldEdgesOff()
-        featureEdges.NonManifoldEdgesOff()
-        featureEdges.Update()
-        edge_poly = featureEdges.GetOutput()
-        gr_edge = self.compute_center_of_mass(edge_poly)
+        # Reorient data
+        gravity = self.compute_center_of_mass(reoriented_poly_data)
+        bounds = reoriented_poly_data.GetBounds()
 
-        if gr_edge[2] > 0:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
-            reoriented_poly_data, trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
+        # check if y correct
+        front = self.crop_mesh(reoriented_poly_data, bounds[0], bounds[1], gravity[1], bounds[3], bounds[4], bounds[5])
+        back = self.crop_mesh(reoriented_poly_data, bounds[0], bounds[1], bounds[2], gravity[1], bounds[4], bounds[5])
+        frBounds = front.GetBounds()
+        bkBounds = back.GetBounds()
+
+        # check if y in right direction
+        if frBounds[1] - frBounds[0] > bkBounds[1] - bkBounds[0]:
+            print "flip y"
+            reoriented_poly_data,trans = self.rotate_angle(reoriented_poly_data, [0, 0, 1], 180)
             tmp_transform.Concatenate(trans)
 
-        return reoriented_poly_data, tmp_transform
+        # decimate mesh to help computation
+        dec = vtk.vtkDecimatePro()
+        dec.SetInputData(reoriented_poly_data)
+        dec.SetTargetReduction(0.001)
+        dec.PreserveTopologyOff()
+        dec.SplittingOn()
+        dec.BoundaryVertexDeletionOn()
+        dec.Update()
+
+
+        # compute curvature value
+        curv = vtk.vtkCurvatures()
+        curv.SetInputData(dec.GetOutput())
+        curv.SetCurvatureTypeToMean()
+        curv.Update()
+
+        # get rid of too high and too low curvature (the interest points are in range [0,1])
+        thres = vtk.vtkThresholdPoints()
+        thres.SetInputConnection(curv.GetOutputPort())
+        thres.ThresholdBetween(0, 1)
+        thres.Update()
+
+        # there are still too many points (with flat points as well), need to get rid of them by using mean and std
+        scalarValues = thres.GetOutput().GetPointData().GetScalars()
+        vals = np.zeros(scalarValues.GetNumberOfTuples())
+        for i in range(0, scalarValues.GetNumberOfTuples()):
+            vals[i] = scalarValues.GetTuple(i)[0]
+
+        valMean = np.mean(vals)
+        stdev = np.std(vals)
+
+        thres2 = vtk.vtkThresholdPoints()
+        thres2.SetInputConnection(thres.GetOutputPort())
+        thres2.ThresholdBetween(valMean - 2 * stdev, valMean + 2 * stdev)
+        thres2.Update()
+
+
+        # the result is a cloud of points, need to build a polydata, but only when points are close enough to one other
+        randomDelaunay = vtk.vtkDelaunay2D()
+        randomDelaunay.SetInputConnection(thres2.GetOutputPort())
+
+        # if there are not many points, increase a bit the radius
+        if thres2.GetOutput().GetNumberOfPoints() < 10000:
+            randomDelaunay.SetAlpha(0.3)  # radius max of a point to connect with another one
+        else:
+            randomDelaunay.SetAlpha(0.2)
+        randomDelaunay.Update()
+
+        # get biggest component
+        con_filter = vtk.vtkPolyDataConnectivityFilter()
+        con_filter.SetExtractionModeToLargestRegion()
+        con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
+        con_filter.Update()
+        upperGingiva = vtk.vtkPolyData()
+        upperGingiva.DeepCopy(con_filter.GetOutput())
+
+        newBounds = upperGingiva.GetBounds()
+
+        # if the teeth are disconnected, only a part has been found, need to add other big regions as well
+        if not skip_gingiva and (upperGingiva.GetNumberOfCells() < 3000 or newBounds[1] - newBounds[0] < 0.6 * (bounds[1] - bounds[0])):
+            con_filter = vtk.vtkPolyDataConnectivityFilter()
+            con_filter.SetExtractionModeToAllRegions()
+            con_filter.ColorRegionsOn()
+            con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
+            con_filter.ScalarConnectivityOff()
+            con_filter.Update()
+
+            nbRegions = con_filter.GetNumberOfExtractedRegions()
+            con_filter.InitializeSpecifiedRegionList()
+
+            previousCellNb = 0
+
+            for i in range(0, nbRegions):
+                con_filter.SetExtractionModeToSpecifiedRegions()
+                con_filter.AddSpecifiedRegion(i)  # add a region to the selection
+                con_filter.Update()
+                nbCells = con_filter.GetOutput().GetNumberOfCells()
+                if nbCells - previousCellNb < 200:  # get only big regions
+                    con_filter.DeleteSpecifiedRegion(i)  # do not keep the region (delete from selection)
+                previousCellNb = nbCells  # contains all cells except the ones from deleted regions
+            upperGingiva.DeepCopy(con_filter.GetOutput())
+
+        newGravity = self.compute_center_of_mass(upperGingiva)
+        print newGravity
+
+        # the upper part of teeth has been extracted, as the mesh is centered on the center of mass of initial polydata
+        # if the center of mass of the upper part is above, the mesh is correctly oriented, otherwise, need to rotate around y
+        # to have z facing the good direction
+        if newGravity[2] < 0:
+            print "flip z"
+            newpolydata,trans = self.rotate_angle(upperGingiva, [0, 1, 0], 180)
+            reoriented_poly_data,trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
+            tmp_transform.Concatenate(trans)
+
+
+        # if gr_edge[2] > 0:  # the basis should be negative (under center of gravity which has (0,0,0) coordinates)
+        #     reoriented_poly_data, trans = self.rotate_angle(reoriented_poly_data, [0, 1, 0], 180)
+        #     tmp_transform.Concatenate(trans)
+
+        return reoriented_poly_data, tmp_transform, upperGingiva
 
     def is_mesh_with_basis_on_head(self, input_poly_data):
         """
