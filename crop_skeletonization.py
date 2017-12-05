@@ -6,12 +6,20 @@ import smoothing as sm
 import vtk
 
 base_path = r'.\image_data\\'
+
+# parameters
 keep_percentage_after_crop = 0.6
 crop_step_size = 0.025
+inwards_radius_percent = 0.25
+outwards_radius_percent = 0.25
+granularity_of_profiles = 100
+magnitude_threshold = 0.02
+minimum_z_percent_to_crop = 0.1
+maximum_z_percent_to_crop = 0.7
 
 for i, case in enumerate(os.listdir(base_path)):
-    if i+1 >= 17:
-        for side in ["lower"]:
+    if i+1 >= 1 :
+        for side in ["upper", "lower"]:
 
 
             ########################
@@ -46,7 +54,7 @@ for i, case in enumerate(os.listdir(base_path)):
             original = reoriented_polydata
 
             # remove tongue, try different thresholds
-            reoriented_polydata = meshOp.remove_tongue(reoriented_polydata, threshold=0.02)
+            reoriented_polydata = meshOp.remove_tongue(reoriented_polydata, threshold=magnitude_threshold)
 
 
             #####################################
@@ -64,7 +72,7 @@ for i, case in enumerate(os.listdir(base_path)):
             cropped_poly = meshOp.crop_mesh_maximum(dec_poly_data, dec_poly_data.GetBounds()[0],
                                             dec_poly_data.GetBounds()[1],
                                             dec_poly_data.GetBounds()[2], dec_poly_data.GetBounds()[3],
-                                            dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5], 0.15, 0.90,
+                                            dec_poly_data.GetBounds()[5], dec_poly_data.GetBounds()[5], minimum_z_percent_to_crop, maximum_z_percent_to_crop,
                                                     crop_step_size, keep_percentage_after_crop)
 
 
@@ -83,7 +91,6 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # get outer edges
             edge_poly = meshOp.get_outer_edges(dec_poly_data)
-            # edge_poly = meshOp.smoothen(edge_poly, 15, 0.01)
             edge_poly, _ = meshOp.flatten(edge_poly)  # make it flat
 
 
@@ -91,7 +98,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # find intersection of vertical lines with the original aligned mesh
 
-            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points, 100, 0.1, 0.1)
+            skeleton_final = meshOp.place_skeleton_on_original_mesh(reoriented_polydata, skeleton_points, granularity_of_profiles, inwards_radius_percent, outwards_radius_percent )
 
             smoother = sm.Smoothing()
             #skeleton_final = smoother.polyDataSmoothed(skeleton_final, 5, 5)
