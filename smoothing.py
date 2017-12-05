@@ -1,5 +1,7 @@
 import numpy as np
 import meshOperations
+import vtk
+import scipy.interpolate as si
 
 class Smoothing:
     def distPt(self,pt1,pt2):
@@ -44,12 +46,60 @@ class Smoothing:
         :return: a numpy array containing the smoothed points
         """
         npPoints = np.zeros(shape=(polydata.GetNumberOfPoints(),3))
-        npPoints[0]=polydata.GetPoint(0)
-        for i in range (0,polydata.GetNumberOfPoints()-1):
-            npPoints[i+1]=polydata.GetPoint(i+1)
+        for i in range (0,polydata.GetNumberOfPoints()):
+            npPoints[i]=polydata.GetPoint(i)
         for j in range (0,nbIter):
             self.putPointsCloser(npPoints,threshold)
-        return npPoints 
+        return npPoints
+
+    def interpolate(self,polydata):
+        points = vtk.vtkPoints()
+        indexInit = -1
+        i = 0
+        print 'interpolate'
+        while indexInit == -1 and i<polydata.GetNumberOfPoints():
+            pt = polydata.GetPoint(i)
+            if pt[0]!=0.0 and pt[1]!=0.0 and pt[2]!=0.0:
+                indexInit = i
+                points.InsertNextPoint(pt)
+            i = i + 1
+        print indexInit
+        # line = np.zeros(shape=(2,points.GetNumberOfPoints()))
+        #
+        # for i in range (0,points.GetNumberOfPoints()):
+        #     pt = points.GetPoint(i)
+        #     line[0,i] = pt[0]
+        #     line[1,i] = pt[1]
+        #
+        #
+        # tck,u = si.splprep(line,k=3, s=10000, nest=3)#, nest=15)
+        # new_points = si.splev(u, tck)
+        lastIndex = indexInit
+        while i < polydata.GetNumberOfPoints():
+            pt = polydata.GetPoint(i)
+            if pt[0] != 0.0 and pt[1] != 0.0 and pt[2] != 0.0:
+                if lastIndex < i-1: #some points lie between, interpolate them
+                    print (lastIndex,i, polydata.GetPoint(lastIndex), pt)
+                    lastPoint = polydata.GetPoint(lastIndex)
+                    currentMinusLast = [pt[0]-lastPoint[0],pt[1]-lastPoint[1]]
+                    middleInterpolated = [(lastPoint[0] + pt[0]- currentMinusLast[1])/4,
+                                          (lastPoint[1]+ pt[1]+currentMinusLast[0])/4]
+                    x = [lastPoint[0],middleInterpolated[0],pt[0]]
+                    y = [lastPoint[1], middleInterpolated[1], pt[1]]
+                    print (x,y)
+                    tck = si.splrep(x, y,k=2)
+                    xnew = np.linspace(lastPoint[0], pt[0], num=i +1 - lastIndex, endpoint=True)
+                    ynew = interpolate.splev(xnew, tck)
+                    for j in range (1, i - lastIndex):
+                        points.InsertNextPoint([xnew[j],ynew[j],pt[2]])
+                points.InsertNextPoint(pt)
+                lastIndex = i
+            else:
+                print i
+            i = i + 1
+        return points
+
+
 
     def polyDataSmoothed(self,polydata,nbIter,threshold):
         """
@@ -76,10 +126,11 @@ class Smoothing:
         :param threshold: thresholding distance for smoothing (bringing points closer if they are far)
         :return: a polydata containing a weighted combination between the initial polydata and its smooth version
         """
-        npPoints = self.smooth(polydata,nbIter,threshold)
-        moys = np.zeros(shape=(polydata.GetNumberOfPoints(),3))
-        for i in range (0,polydata.GetNumberOfPoints()):
-            firstPt = np.asarray(polydata.GetPoint(i))
+        points = self.interpolate(polydata)
+        npPoints = self.smooth(points,nbIter,threshold)
+        moys = np.zeros(shape=(points.GetNumberOfPoints(),3))
+        for i in range (0,points.GetNumberOfPoints()):
+            firstPt = np.asarray(points.GetPoint(i))
             dist = self.distPt(npPoints[i],firstPt)
             if dist>1:
                 moy = npPoints[i]+(firstPt-npPoints[i])/dist

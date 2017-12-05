@@ -11,8 +11,8 @@ base_path = r'./image_data//'
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1:
-        for side in ["upper", "lower"]:
+    if i+1 >= 1 and i>1:
+        for side in ["lower"]:#,"upper",]:
 
             ##############################################################
             ################## Part 1 : Preprocessing ####################
@@ -31,9 +31,30 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
             # Reorient data
-            polydata,trans,gingiva = meshOp.align_to_axes(polydata,False)
+            polydata,transform,gingiva = meshOp.align_to_axes(polydata,False)
             gingivaGravity = meshOp.compute_center_of_mass(gingiva)
+            suggest_line, _ = meshOp.transform(suggest_line, transform)
+
             bounds = gingiva.GetBounds()
+
+
+            featureEdges = vtk.vtkFeatureEdges()
+            featureEdges.SetInputData(gingiva)  # get basis
+            featureEdges.BoundaryEdgesOff()
+            featureEdges.FeatureEdgesOff()
+            featureEdges.ManifoldEdgesOn()
+            featureEdges.NonManifoldEdgesOn()
+            featureEdges.Update()
+
+
+            randomDelaunay = vtk.vtkDelaunay2D()
+            randomDelaunay.SetInputConnection(featureEdges.GetOutputPort())
+            randomDelaunay.SetAlpha(1)
+            randomDelaunay.Update()
+
+            rend = renderer.Renderer()
+            rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)
+            rend.render()
 
 
             ##############################################################
@@ -45,8 +66,11 @@ for i, case in enumerate(os.listdir(base_path)):
             ### All points with highest z components are returned by findPoints
 
             center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
-            rayC = raycasting.RayCasting(poly_data=gingiva)
-            points = rayC.findPoints(center,True)
+            rayC = raycasting.RayCasting(poly_data=randomDelaunay.GetOutput())
+            points = rayC.findPoints(center)
+
+
+
 
             ##############################################################
             ################### Part 3 : Postprocessing ##################
@@ -77,6 +101,11 @@ for i, case in enumerate(os.listdir(base_path)):
             writer.SetFileName("./rayCastLower3602.vtk")
             writer.SetInputData(rays)
             writer.Write()
+
+
+            rend = renderer.Renderer()
+            rend.add_actor(rays, color=[1, 1, 1], wireframe=False)
+            rend.render()
 
             ##############################################################
             ################## Part 2 : Smoothing ########################
@@ -140,65 +169,13 @@ for i, case in enumerate(os.listdir(base_path)):
             skeleton_final.SetPoints(skeleton_points_final)
             skeleton_final.SetLines(whole_line_final)
 
-            rend = renderer.Renderer()
-            rend.add_actor(polydata, color=[1,1,1], wireframe= False)
-            rend.add_actor(skeleton_final, color=[1,0,1], wireframe= False)
-            rend.render()
 
 
             ##############################################################
             ################### Part 4 : Visualization ###################
             ##############################################################
-
-            inputMapper = vtk.vtkDataSetMapper()
-            planeMapper = vtk.vtkDataSetMapper()
-            if vtk.VTK_MAJOR_VERSION <= 5:
-                inputMapper.SetInput(polydata)
-            else:
-                inputMapper.SetInputData(polydata)
-
-            imgMapper = vtk.vtkDataSetMapper()
-
-            if vtk.VTK_MAJOR_VERSION <= 5:
-                imgMapper.SetInput(skeleton_final)
-            else:
-                imgMapper.SetInputData(skeleton_final)
-
-            inputActor = vtk.vtkActor()
-            inputActor.SetMapper(inputMapper)
-            selectedActor = vtk.vtkActor()
-            selectedActor.SetMapper(imgMapper)
-            inputActor.GetProperty().SetOpacity(0.2)
-
-            # There will be one render window
-            renderWindow = vtk.vtkRenderWindow()
-            renderWindow.SetSize(900, 300)
-
-            # # And one interactor
-            interactor = vtk.vtkRenderWindowInteractor()
-            interactor.SetRenderWindow(renderWindow)
-
-            # Define viewport ranges
-            # (xmin, ymin, xmax, ymax)
-            leftViewport = [0.0, 0.0, 0.5, 1.0]
-            centerViewport = [0.5, 0.0, 1.0, 1.0]
-
-            # Setup the renderers
-            leftRenderer = vtk.vtkRenderer()
-            renderWindow.AddRenderer(leftRenderer)
-            leftRenderer.SetViewport(leftViewport)
-            leftRenderer.SetBackground(.6, .5, .4)
-
-            centerRenderer = vtk.vtkRenderer()
-            renderWindow.AddRenderer(centerRenderer)
-            centerRenderer.SetViewport(centerViewport)
-            centerRenderer.SetBackground(.8, .8, .8)
-
-            leftRenderer.AddActor(inputActor)
-            leftRenderer.AddActor(selectedActor)
-            centerRenderer.AddActor(selectedActor)
-
-            leftRenderer.ResetCamera()
-
-            renderWindow.Render()
-            interactor.Start()
+            rend = renderer.Renderer()
+            rend.add_actor(polydata, color=[1,1,1], wireframe= False)
+            rend.add_actor(skeleton_final, color=[1,0,1], wireframe= False)
+            rend.add_actor(suggest_line, color=[0,0,1], wireframe= False)
+            rend.render()

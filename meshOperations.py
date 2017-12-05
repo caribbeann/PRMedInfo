@@ -111,11 +111,21 @@ class MeshOperations:
         curv.SetCurvatureTypeToMean()
         curv.Update()
 
+        #import renderer
+        # rend = renderer.Renderer()
+        # rend.add_actor(curv.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # rend.render()
+
         # get rid of too high and too low curvature (the interest points are in range [0,1])
         thres = vtk.vtkThresholdPoints()
         thres.SetInputConnection(curv.GetOutputPort())
-        thres.ThresholdBetween(0, 1)
+        thres.ThresholdBetween(0, 0.6)
         thres.Update()
+
+        #
+        # rend = renderer.Renderer()
+        # rend.add_actor(thres.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # rend.render()
 
         # there are still too many points (with flat points as well), need to get rid of them by using mean and std
         scalarValues = thres.GetOutput().GetPointData().GetScalars()
@@ -126,10 +136,15 @@ class MeshOperations:
         valMean = np.mean(vals)
         stdev = np.std(vals)
 
+
         thres2 = vtk.vtkThresholdPoints()
         thres2.SetInputConnection(thres.GetOutputPort())
         thres2.ThresholdBetween(valMean - 2 * stdev, valMean + 2 * stdev)
         thres2.Update()
+
+        # rend = renderer.Renderer()
+        # rend.add_actor(thres2.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # rend.render()
 
 
         # the result is a cloud of points, need to build a polydata, but only when points are close enough to one other
@@ -142,6 +157,11 @@ class MeshOperations:
         else:
             randomDelaunay.SetAlpha(0.2)
         randomDelaunay.Update()
+
+
+        # rend = renderer.Renderer()
+        # rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # rend.render()
 
         # get biggest component
         con_filter = vtk.vtkPolyDataConnectivityFilter()
@@ -179,6 +199,7 @@ class MeshOperations:
 
         newGravity = self.compute_center_of_mass(upperGingiva)
         print newGravity
+
 
         # the upper part of teeth has been extracted, as the mesh is centered on the center of mass of initial polydata
         # if the center of mass of the upper part is above, the mesh is correctly oriented, otherwise, need to rotate around y

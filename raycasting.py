@@ -1,5 +1,9 @@
 import vtk
 import math
+import renderer
+from sklearn.cluster import DBSCAN
+import numpy as np
+import renderer
 
 class RayCasting:
     def __init__(self, *args, **kwargs):
@@ -10,26 +14,87 @@ class RayCasting:
         self.tripoly = tri.GetOutput()
         self.bounds = self.poly_data.GetBounds()
 
-    def findPoints(self,center,maxZ):
+    def distPt(self,pt1,pt2):
+        """
+        Compute the squared distance between points pt1 and pt2
+        :param pt1: first point (numpy array)
+        :param pt2: second point (numpy array)
+        :return: the distance between the points
+        """
+        pt12 = pt1-pt2
+        return np.dot(pt12,pt12)
+
+    def findPoints(self,center, thresholdNb):
         vmaths = vtk.vtkMath()
-        points = vtk.vtkPoints()
+        pts = np.zeros(shape=(360, 4))
         bounds = self.poly_data.GetBounds()
         firstCorner = [bounds[0],bounds[2],center[2]]
         #thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0],bounds[2],0.0])
         angleStep = vmaths.RadiansFromDegrees(-1.0)
         length = bounds[3]/2-bounds[2]
+        nbPts = 0
         for i in range (0,360):
             print i
-            pt = self._rayCast(center,[-length*math.sin(angleStep*i),-length*math.cos(angleStep*i),center[2]],maxZ)
+            pt = self._rayCast(center,[-length*math.sin(angleStep*i),-length*math.cos(angleStep*i),center[2]])
             if pt != -1:
-                points.InsertNextPoint(pt)
-        return points
+                pts[i,0:2] = pt
+                pts[i,3] = i
+                nbPts = nbPts + 1
+            else :
+                points.InsertNextPoint([0.0,0.0,0.0])
+
+        # check if no instable region
+        indexInit = -1
+        i = 0
+        while indexInit == -1 and i<360:
+            pt = pts[i,:]
+            if pt[0]!=0.0 and pt[1]!=0.0 and pt[2]!=0.0:
+                indexInit = i
+            i = i + 1
+        lastPt = indexInit
+        counter = 1
+        # compute distances
+        dists = np.zeros(shape=(nbPts-1,3))
+        for i in range(indexInit+1, 360):
+            if pts[i,0] != 0.0 and pts[i,1] != 0.0 and pts[i,2]!=0.0:
+                pt1 = pts[i,0:2]
+                pt2 = pts[lastPt,0:2]
+                val = self.distPt(pt1, pt2)
+                dists[i,0] = val
+                dists[i,2] = pts[i,3]
+                lastPt = i
+                if val > threshold * (i - lastPt):
+                    #dists[i,1]=-1 #mark as unstable border
+                    dists[lastPt,1]=counter
+                    counter = 1
+                else :
+                    counter = counter + 1
+        if dists[nbPts-1,1] == 0:
+            dists[nbPts - 1, 1] = counter
+
+        firstStableId = -1
+        # compute stable regions
+        for i in reversed(range(0,nbPts-1)):
+            if dists[i,1] == 0:
+                dists[i, 1] = lastValue
+            else:
+                lastValue = dists[i,1]
+                if lastValue>thresholdNb: #TODO gérer pb qd trou (multiplier thresholdnb)
+                    firstStableId = i
+
+        # raycast again instable regions
+        for i in range (firstStableId, nbPts-1):
+            stepX = math.sin(angleStep * i)
+            stepY = math.cos(angleStep * i)
+            pt = self._rayCast(center,
+                               [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
+
+    return points
 
     def findPoints2(self,line,maxZ,windowSize):
         vmaths = vtk.vtkMath()
         points = vtk.vtkPoints()
         bounds = self.poly_data.GetBounds()
-        windowVal = windowSize/2
         
         for i in range (0,line.GetNumberOfPoints()-1):
             currentPt = line.GetPoint(i)
@@ -47,7 +112,25 @@ class RayCasting:
                 print i
             else:
                 print ":'("    
-        return points  
+        return points
+
+    def findPointsOld(self, center):
+            vmaths = vtk.vtkMath()
+            points = vtk.vtkPoints()
+            bounds = self.poly_data.GetBounds()
+            firstCorner = [bounds[0], bounds[2], center[2]]
+            # thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0],bounds[2],0.0])
+            angleStep = vmaths.RadiansFromDegrees(-1.0)
+            length = bounds[3] / 2 - bounds[2]
+            for i in range(0, 360):
+                print i
+                pt = self._rayCast(center,
+                                   [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
+                if pt != -1:
+                    points.InsertNextPoint(pt)
+                    # else :
+                    #    points.InsertNextPoint([0.0,0.0,0.0])
+            return points
 
     # def goUpward(self,line):
     #     points = vtk.vtkPoints()
@@ -75,9 +158,7 @@ class RayCasting:
     #             print ":'("
     #     return points            
 
-
-
-    def _rayCast(self,center,point1,maxZ):
+    def _constrainedRayCast(self,center,point1):
         # perform ray casting
         plane = vtk.vtkPlaneSource()
         plane.SetCenter(center)
@@ -97,26 +178,107 @@ class RayCasting:
         inter.SetSplitSecondOutput(0)
         inter.Update()
 
-        vmaths = vtk.vtkMath()
-
         points = inter.GetOutput()
+
+        print points.GetNumberOfPoints()
 
         if points.GetNumberOfPoints()==0:
             return -1
-        # find the min or max height points among the found points
-        idMinMax = 0
-        if maxZ==True: #maximize Z
+
+        idMax = 0
+        if maxZ == True:  # maximize Z
             valMax = points.GetPoint(0)[2]
-            for i in range (0, points.GetNumberOfPoints()):
+            for i in range(0, points.GetNumberOfPoints()):
                 p = points.GetPoint(i)
-                if p[2]>valMax:
+                if p[2] > valMax:
                     valMax = p[2]
-                    idMinMax = i
-        else :
-            valMin = points.GetPoint(0)[2]
-            for i in range (0, points.GetNumberOfPoints()):
-                p = points.GetPoint(i)
-                if p[2]<valMin:
-                    valMin = p[2]
-                    idMinMax = i
-        return points.GetPoint(idMinMax)
+                    idMax = i
+
+        return points.GetPoint(idMax)
+
+
+    def _rayCast(self,center,point1):
+        # perform ray casting
+        plane = vtk.vtkPlaneSource()
+        plane.SetCenter(center)
+        plane.SetPoint1(point1)
+        p = [center[0],center[1],self.poly_data.GetBounds()[4]]
+        plane.SetPoint2(p)
+        plane.Update()
+
+        tri2 = vtk.vtkTriangleFilter()
+        tri2.SetInputData(plane.GetOutput())
+        tri2.Update()
+
+        inter = vtk.vtkIntersectionPolyDataFilter()
+        inter.SetInputData(0,self.tripoly)
+        inter.SetInputData(1,tri2.GetOutput())
+        inter.SetSplitFirstOutput(0)
+        inter.SetSplitSecondOutput(0)
+        inter.Update()
+
+        points = inter.GetOutput()
+
+        print points.GetNumberOfPoints()
+
+        if points.GetNumberOfPoints()==0:
+            return -1
+
+        pts = np.zeros(shape=(points.GetNumberOfPoints(), 3))
+        for i in range(0, points.GetNumberOfPoints()):
+            pts[i,:] = np.asarray(points.GetPoint(i))
+        print pts
+        # Compute DBSCAN
+        db = DBSCAN(eps=1).fit(pts)
+        core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+        core_samples_mask[db.core_sample_indices_] = True
+        labels = db.labels_
+
+        print labels
+        labels = labels+1
+        print labels
+
+        y = np.bincount(labels)
+        ii = np.nonzero(y)[0]
+        print y
+        print ii
+        max = 0
+        maxId = -1
+        for i in ii:
+            print('nb %d',y[i])
+            if y[i]>max:
+                max = y[i]
+                maxId = i
+
+        newPoints = np.zeros(shape=(max,3))
+        idx = 0
+        print db.components_
+        for i in range (0,points.GetNumberOfPoints()):
+            if labels[i]==maxId:
+                newPoints[idx,:] = pts[i,:]
+                idx = idx+1
+
+        print newPoints
+        #print db.labels_
+
+        # Number of clusters in labels, ignoring noise if present.
+        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+
+        print('Estimated number of clusters: %d' % n_clusters_)
+
+        # rend = renderer.Renderer()
+        # rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
+        # rend.add_actor(plane.GetOutput(), color=[0, 0, 1], wireframe=False)
+        # rend.render()
+
+
+        # find the min or max height points among the found points
+        idMax = 0
+        valMax = newPoints[0,2]
+        for i in range (0, len(newPoints)):#points.GetNumberOfPoints()):
+            #p = points.GetPoint(i)
+            p = newPoints[i,:]
+            if p[2]>valMax:
+                valMax = p[2]
+                idMax = i
+        return newPoints[idMax,:]#,newPoints[idMax,1],newPoints[idMax,2]]#points.GetPoint(idMax)
