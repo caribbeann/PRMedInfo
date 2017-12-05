@@ -119,7 +119,7 @@ class MeshOperations:
         # get rid of too high and too low curvature (the interest points are in range [0,1])
         thres = vtk.vtkThresholdPoints()
         thres.SetInputConnection(curv.GetOutputPort())
-        thres.ThresholdBetween(0, 0.6)
+        thres.ThresholdBetween(0, 0.7)
         thres.Update()
 
         #

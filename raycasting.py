@@ -4,6 +4,7 @@ import renderer
 from sklearn.cluster import DBSCAN
 import numpy as np
 import renderer
+from scipy.sparse.csgraph import shortest_path
 
 class RayCasting:
     def __init__(self, *args, **kwargs):
@@ -24,72 +25,80 @@ class RayCasting:
         pt12 = pt1-pt2
         return np.dot(pt12,pt12)
 
-    def findPoints(self,center, thresholdNb):
+    def findPoints(self,center):#, thresholdNb):
         vmaths = vtk.vtkMath()
-        pts = np.zeros(shape=(360, 4))
+        pts = [None]*360#np.zeros(shape=(360, 4))
         bounds = self.poly_data.GetBounds()
-        firstCorner = [bounds[0],bounds[2],center[2]]
-        #thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0],bounds[2],0.0])
         angleStep = vmaths.RadiansFromDegrees(-1.0)
         length = bounds[3]/2-bounds[2]
         nbPts = 0
+        nbRaysOk = 0
         for i in range (0,360):
             print i
             pt = self._rayCast(center,[-length*math.sin(angleStep*i),-length*math.cos(angleStep*i),center[2]])
             if pt != -1:
-                pts[i,0:2] = pt
-                pts[i,3] = i
-                nbPts = nbPts + 1
+                pts[i] = pt
+                nbPts = nbPts + len(pt)
+                nbRaysOk = nbRaysOk + 1
             else :
-                points.InsertNextPoint([0.0,0.0,0.0])
+                pts[i]=-1
 
-        # check if no instable region
+        # compute distances
+        dists = np.zeros(shape=(nbPts, nbPts))
         indexInit = -1
         i = 0
+        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint64) #idmap
+        current = 0
+        #find first point(s)
         while indexInit == -1 and i<360:
-            pt = pts[i,:]
-            if pt[0]!=0.0 and pt[1]!=0.0 and pt[2]!=0.0:
+            pt = pts[i]
+            if pt!=-1:
                 indexInit = i
+                currentIdx = len(pt)
+                lastPtsDistIdx = np.arange(currentIdx)
+                lastRay = indexInit
+                for j in range(0, len(pts[i])):
+                    ptIds[current, 0] = i
+                    ptIds[current, 1] = j
+                    current = current + 1
             i = i + 1
-        lastPt = indexInit
-        counter = 1
-        # compute distances
-        dists = np.zeros(shape=(nbPts-1,3))
         for i in range(indexInit+1, 360):
-            if pts[i,0] != 0.0 and pts[i,1] != 0.0 and pts[i,2]!=0.0:
-                pt1 = pts[i,0:2]
-                pt2 = pts[lastPt,0:2]
-                val = self.distPt(pt1, pt2)
-                dists[i,0] = val
-                dists[i,2] = pts[i,3]
-                lastPt = i
-                if val > threshold * (i - lastPt):
-                    #dists[i,1]=-1 #mark as unstable border
-                    dists[lastPt,1]=counter
-                    counter = 1
-                else :
-                    counter = counter + 1
-        if dists[nbPts-1,1] == 0:
-            dists[nbPts - 1, 1] = counter
+            if pts[i] != -1:
+                currentPts = pts[i]
+                lastPts = pts[lastRay]
+                #compute distances and store them in distance matrix
+                for j in range (0, len(currentPts)):
+                    for k in range (0,lastPtsDistIdx.size):
+                        dists[lastPtsDistIdx[k], current] = self.distPt(np.asarray(currentPts[j]),np.asarray(lastPts[k]))
 
-        firstStableId = -1
-        # compute stable regions
-        for i in reversed(range(0,nbPts-1)):
-            if dists[i,1] == 0:
-                dists[i, 1] = lastValue
-            else:
-                lastValue = dists[i,1]
-                if lastValue>thresholdNb: #TODO gérer pb qd trou (multiplier thresholdnb)
-                    firstStableId = i
+                    ptIds[current, 0] = i
+                    ptIds[current, 1] = j
+                    current = current + 1
 
-        # raycast again instable regions
-        for i in range (firstStableId, nbPts-1):
-            stepX = math.sin(angleStep * i)
-            stepY = math.cos(angleStep * i)
-            pt = self._rayCast(center,
-                               [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
+                lastPtsDistIdx = np.arange(current-len(currentPts),current)
+                lastRay = i
+        current = current-1
+        #compute shortest path
+        dist_matrix, predecessors = shortest_path(dists,method="D",directed=True,return_predecessors=True)
+        minDist = dist_matrix[0,current]
+        optima = (0,current)
+        for i in range (0,len(pts[indexInit])):
+            for j in range(current-len(pts[lastRay]),current):
+                curDist = dist_matrix[i,j]
+                if curDist<minDist:
+                    optima = (i,j)
 
-    return points
+        #print predecessors[optima[0],:]
+
+        points = vtk.vtkPoints()
+        current = optima[1]
+        i = 0
+        while current!=optima[0]:
+            pt = pts[ptIds[current, 0]][ptIds[current, 1]]
+            points.InsertNextPoint([pt[0],pt[1],pt[2]])
+            current = predecessors[optima[0],current]
+            i = i + 1
+        return points
 
     def findPoints2(self,line,maxZ,windowSize):
         vmaths = vtk.vtkMath()
@@ -219,7 +228,7 @@ class RayCasting:
 
         points = inter.GetOutput()
 
-        print points.GetNumberOfPoints()
+        #print points.GetNumberOfPoints()
 
         if points.GetNumberOfPoints()==0:
             return -1
@@ -227,58 +236,58 @@ class RayCasting:
         pts = np.zeros(shape=(points.GetNumberOfPoints(), 3))
         for i in range(0, points.GetNumberOfPoints()):
             pts[i,:] = np.asarray(points.GetPoint(i))
-        print pts
+        #print pts
         # Compute DBSCAN
         db = DBSCAN(eps=1).fit(pts)
         core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
         core_samples_mask[db.core_sample_indices_] = True
         labels = db.labels_
 
-        print labels
+        #print labels
         labels = labels+1
-        print labels
+        #print labels
 
         y = np.bincount(labels)
         ii = np.nonzero(y)[0]
-        print y
-        print ii
-        max = 0
-        maxId = -1
+        ans = [None]*len(ii)
+        #print y
+        #print ii
+        ansIdx = 0
         for i in ii:
-            print('nb %d',y[i])
-            if y[i]>max:
-                max = y[i]
-                maxId = i
 
-        newPoints = np.zeros(shape=(max,3))
-        idx = 0
-        print db.components_
-        for i in range (0,points.GetNumberOfPoints()):
-            if labels[i]==maxId:
-                newPoints[idx,:] = pts[i,:]
-                idx = idx+1
+            newPoints = np.zeros(shape=(points.GetNumberOfPoints(),3))
+            idx = 0
+            #get points
+            for j in range (0,points.GetNumberOfPoints()):
+                if labels[j]==i:
+                    newPoints[idx,:] = pts[j,:]
+                    idx = idx+1
 
-        print newPoints
-        #print db.labels_
+            #print newPoints
+            #print db.labels_
 
-        # Number of clusters in labels, ignoring noise if present.
-        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+            # Number of clusters in labels, ignoring noise if present.
+            n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
 
-        print('Estimated number of clusters: %d' % n_clusters_)
+            #print('Estimated number of clusters: %d' % n_clusters_)
 
-        # rend = renderer.Renderer()
-        # rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
-        # rend.add_actor(plane.GetOutput(), color=[0, 0, 1], wireframe=False)
-        # rend.render()
+            # rend = renderer.Renderer()
+            # rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
+            # rend.add_actor(plane.GetOutput(), color=[0, 0, 1], wireframe=False)
+            # rend.render()
 
 
-        # find the min or max height points among the found points
-        idMax = 0
-        valMax = newPoints[0,2]
-        for i in range (0, len(newPoints)):#points.GetNumberOfPoints()):
-            #p = points.GetPoint(i)
-            p = newPoints[i,:]
-            if p[2]>valMax:
-                valMax = p[2]
-                idMax = i
-        return newPoints[idMax,:]#,newPoints[idMax,1],newPoints[idMax,2]]#points.GetPoint(idMax)
+            # find the min or max height points among the found points
+            idMax = 0
+            valMax = newPoints[0,2]
+            for j in range (0, idx):#points.GetNumberOfPoints()):
+                #p = points.GetPoint(i)
+                p = newPoints[j,:]
+                if p[2]>valMax:
+                    valMax = p[2]
+                    idMax = j
+            #print ans
+            #print newPoints[idMax,:]
+            ans[ansIdx]=newPoints[idMax,:]
+            ansIdx = ansIdx+1
+        return ans#newPoints[idMax,:]#,newPoints[idMax,1],newPoints[idMax,2]]#points.GetPoint(idMax)

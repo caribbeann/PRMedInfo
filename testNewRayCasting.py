@@ -11,7 +11,7 @@ base_path = r'./image_data//'
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1 and i>1:
+    if i+1 >= 1:# and i>1:
         for side in ["lower"]:#,"upper",]:
 
             ##############################################################
@@ -71,7 +71,6 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
 
-
             ##############################################################
             ################### Part 3 : Postprocessing ##################
             ##############################################################
@@ -86,6 +85,7 @@ for i, case in enumerate(os.listdir(base_path)):
             counter = 0
             for i in range(0, points.GetNumberOfPoints()):
                 pid = skeleton_points_final.InsertNextPoint(points.GetPoint(i))
+                print pid
                 poly_line_final.GetPointIds().SetId(counter, pid)
 
                 counter += 1
