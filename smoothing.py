@@ -56,14 +56,14 @@ class Smoothing:
         points = vtk.vtkPoints()
         indexInit = -1
         i = 0
-        print 'interpolate'
+        #print 'interpolate'
         while indexInit == -1 and i<polydata.GetNumberOfPoints():
             pt = polydata.GetPoint(i)
             if pt[0]!=0.0 and pt[1]!=0.0 and pt[2]!=0.0:
                 indexInit = i
                 points.InsertNextPoint(pt)
             i = i + 1
-        print indexInit
+        #print indexInit
         # line = np.zeros(shape=(2,points.GetNumberOfPoints()))
         #
         # for i in range (0,points.GetNumberOfPoints()):
@@ -94,8 +94,8 @@ class Smoothing:
                         points.InsertNextPoint([xnew[j],ynew[j],pt[2]])
                 points.InsertNextPoint(pt)
                 lastIndex = i
-            else:
-                print i
+            # else:
+            #     print i
             i = i + 1
         return points
 

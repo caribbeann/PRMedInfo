@@ -123,6 +123,7 @@ class MeshOperations:
         thres.Update()
 
         #
+        # import renderer
         # rend = renderer.Renderer()
         # rend.add_actor(thres.GetOutput(), color=[1, 1, 1], wireframe=False)
         # rend.render()
@@ -136,12 +137,16 @@ class MeshOperations:
         valMean = np.mean(vals)
         stdev = np.std(vals)
 
+        print valMean
+        print stdev
+
 
         thres2 = vtk.vtkThresholdPoints()
         thres2.SetInputConnection(thres.GetOutputPort())
-        thres2.ThresholdBetween(valMean - 2 * stdev, valMean + 2 * stdev)
+        thres2.ThresholdBetween(valMean - 2 * stdev, valMean + 2* stdev)
         thres2.Update()
 
+        # import renderer
         # rend = renderer.Renderer()
         # rend.add_actor(thres2.GetOutput(), color=[1, 1, 1], wireframe=False)
         # rend.render()
@@ -173,8 +178,12 @@ class MeshOperations:
 
         newBounds = upperGingiva.GetBounds()
 
+        print upperGingiva.GetNumberOfCells()
+        print newBounds
+        print bounds
+
         # if the teeth are disconnected, only a part has been found, need to add other big regions as well
-        if not skip_gingiva and (upperGingiva.GetNumberOfCells() < 3000 or newBounds[1] - newBounds[0] < 0.6 * (bounds[1] - bounds[0])):
+        if not skip_gingiva and (newBounds[1] - newBounds[0] < 0.7 * (bounds[1] - bounds[0])):
             con_filter = vtk.vtkPolyDataConnectivityFilter()
             con_filter.SetExtractionModeToAllRegions()
             con_filter.ColorRegionsOn()

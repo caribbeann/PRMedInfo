@@ -62,14 +62,19 @@ class RayCasting:
                     ptIds[current, 1] = j
                     current = current + 1
             i = i + 1
+        stop = False
         for i in range(indexInit+1, 360):
-            if pts[i] != -1:
+            if pts[i] != -1 and not stop:
                 currentPts = pts[i]
                 lastPts = pts[lastRay]
                 #compute distances and store them in distance matrix
                 for j in range (0, len(currentPts)):
                     for k in range (0,lastPtsDistIdx.size):
-                        dists[lastPtsDistIdx[k], current] = self.distPt(np.asarray(currentPts[j]),np.asarray(lastPts[k]))
+                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(lastPts[k]))
+                        dists[lastPtsDistIdx[k], current] = currentDist
+                        if currentDist>10 and i-indexInit>265:
+                            stop = True
+                            print 'stop'
 
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
@@ -98,6 +103,7 @@ class RayCasting:
             points.InsertNextPoint([pt[0],pt[1],pt[2]])
             current = predecessors[optima[0],current]
             i = i + 1
+        print lastRay-indexInit
         return points
 
     def findPoints2(self,line,maxZ,windowSize):
