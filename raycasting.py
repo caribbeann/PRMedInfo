@@ -25,15 +25,16 @@ class RayCasting:
         pt12 = pt1-pt2
         return np.dot(pt12,pt12)
 
-    def findPoints(self,center):#, thresholdNb):
+    def findPoints(self,center):
         vmaths = vtk.vtkMath()
-        pts = [None]*360#np.zeros(shape=(360, 4))
+        pts = [None]*360
         bounds = self.poly_data.GetBounds()
         angleStep = vmaths.RadiansFromDegrees(-1.0)
         length = bounds[3]-bounds[2]
         nbPts = 0
         nbRaysOk = 0
         lastRay = 0
+        # perform ray casting and store it in pts
         for i in range (0,360):
             print i
             pt = self._rayCast(center,
@@ -44,27 +45,27 @@ class RayCasting:
                 nbRaysOk = nbRaysOk + 1
                 lastRay = i
             else :
-                pts[i]=-1
+                pts[i]=-1 #no found point
 
         # compute distances
         dists = np.zeros(shape=(nbPts, nbPts))
         indexInit = -1
         i = 0
-        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint32) #idmap
+        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint32) # stores ray nb and pt index in ray, index = id in dists
         current = 0
-        idmap = [None]*360
+        idmap = [None]*360 # idmap : stores the id (in dist) for each point (i corresponds to ray, j to pt index in ray)
+
         #find first point(s)
         while indexInit == -1 and i<360:
             pt = pts[i]
-            if pt!=-1:
+            if pt!=-1:  #found first point, go out of loop and stores characteristics of point
                 indexInit = i
-                currentIdx = len(pt)
-                previousPtsDistIdx = np.arange(currentIdx)
+                previousPtsDistIdx = np.arange(len(pt))
                 prepreviousPtsDistIdx = previousPtsDistIdx
                 previousRay = indexInit
                 prepreviousRay = previousRay
-                currentIIndices = [0]*len(pts[i])
-                for j in range(0, len(pts[i])):
+                currentIIndices = [0]*len(pt)
+                for j in range(0, len(pt)):
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
                     currentIIndices[j] = current
@@ -90,7 +91,7 @@ class RayCasting:
                             minDist = currentDist
                         if currentDist>maxDist:
                             maxDist=currentDist
-
+                    #compute distances with points before previous points
                     for k in range (0,prepreviousPtsDistIdx.size):
                         currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(prepreviousPts[k]))
                         dists[prepreviousPtsDistIdx[k], current] = currentDist
@@ -99,15 +100,14 @@ class RayCasting:
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
                     current = current + 1
-                print (minDist,maxDist,i)
                 if maxDist>1000 and i-indexInit>265:
                     stop = True
                     print 'stop'
-                    lastRay = i
+                    lastRay = i #this was the last ray
                 elif minDist>0.15:
                     for j in range (0, previousPtsDistIdx.size):
                         gaps.InsertNextId(i)
-                    print "gap ",i
+                    #print "gap ",i
 
                 prepreviousPtsDistIdx = previousPtsDistIdx
                 previousPtsDistIdx = np.arange(current-len(currentPts),current)
@@ -117,7 +117,7 @@ class RayCasting:
         current = current-1
 
 
-        #handle gaps
+        #handle gaps : if there is a gap, add links from point to until points from ray 7 rays after the current point's ray
         for i in range (0, gaps.GetNumberOfIds()):
             gapRay = gaps.GetId(i)
             previousPts = pts[gapRay]
@@ -132,6 +132,9 @@ class RayCasting:
 
         #compute shortest path
         dist_matrix, predecessors = shortest_path(dists,method="D",directed=True,return_predecessors=True)
+
+        #find optima (which of the potential several init and end points should be taken :
+        # the ones that minimize the total distance
         minDist = dist_matrix[0,current]
         optima = (0,current)
         for i in range (0,len(pts[indexInit])):
@@ -140,11 +143,10 @@ class RayCasting:
                 if curDist<minDist:
                     optima = (i,j)
 
-        #print predecessors[optima[0],:]
-
         points = vtk.vtkPoints()
         current = optima[1]
         i = 0
+        # loop in the predecessor list to create the points
         while current!=optima[0]:
             pt = pts[ptIds[current, 0]][ptIds[current, 1]]
             points.InsertNextPoint([pt[0],pt[1],pt[2]])

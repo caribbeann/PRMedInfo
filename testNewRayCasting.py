@@ -11,8 +11,8 @@ base_path = r'./image_data//'
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1:# and i>17:# and i>8:
-        for side in ["lower"]:#,"upper",]:
+    if i+1 >= 1:# and i>1:# and i>17:# and i>8:
+        for side in ["lower"]:#,"lower",]:
 
             ##############################################################
             ################## Part 1 : Preprocessing ####################
@@ -31,7 +31,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
             # Reorient data
-            polydata,transform,gingiva = meshOp.align_to_axes(polydata,False)
+            polydata,transform,gingiva = meshOp.align_to_axes(polydata,False,0.7)
             gingivaGravity = meshOp.compute_center_of_mass(gingiva)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
@@ -68,8 +68,12 @@ for i, case in enumerate(os.listdir(base_path)):
             ### All points with highest z components are returned by findPoints
 
             center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
-            rayC = raycasting.RayCasting(poly_data=randomDelaunay.GetOutput())
-            points = rayC.findPoints(center)
+            if side=="lower":
+                rayC = raycasting.RayCasting(poly_data=randomDelaunay.GetOutput())
+                points = rayC.findPoints(center)
+            else:
+                rayC = raycasting.RayCasting(poly_data=polydata)
+                points = rayC.findPointsOld(center)
 
 
 
@@ -99,7 +103,7 @@ for i, case in enumerate(os.listdir(base_path)):
             rays.SetLines(whole_line_final)
 
             writer = vtk.vtkPolyDataWriter()
-            writer.SetFileName("./rayCastLower3602.vtk")
+            writer.SetFileName(base_path + case + "//rayCast_{}_finalVisualization.vtk".format(side))
             writer.SetInputData(rays)
             writer.Write()
 
@@ -182,3 +186,15 @@ for i, case in enumerate(os.listdir(base_path)):
             rend.add_actor(skeleton_final, color=[1,0,1], wireframe= False)
             rend.add_actor(suggest_line, color=[0,0,1], wireframe= False)
             rend.render()
+
+            appendFilter = vtk.vtkAppendPolyData()
+            appendFilter.AddInputData(polydata)
+            appendFilter.AddInputData(skeleton_final)
+            appendFilter.AddInputData(suggest_line)
+
+            appendFilter.Update()
+
+            writer = vtk.vtkPolyDataWriter()
+            writer.SetFileName(base_path + case + "//rayCast_{}_finalVisualization2.vtk".format(side))
+            writer.SetInputData(appendFilter.GetOutput())
+            writer.Write()

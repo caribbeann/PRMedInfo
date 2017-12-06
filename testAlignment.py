@@ -10,8 +10,8 @@ crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1:
-        for side in ["upper", "lower"]:
+    if i+1 >= 1 and i>2:
+        for side in ["upper"]:#, "lower"]:
 
 
             ########################
@@ -28,7 +28,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # move mesh to origin in any case
 
-            reoriented_polydata, transform, gingiva = meshOp.align_to_axes(original_polydata)
+            reoriented_polydata, transform, gingiva = meshOp.align_to_axes(original_polydata,False,0.7)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
             rend = renderer.Renderer()

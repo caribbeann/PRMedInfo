@@ -56,7 +56,7 @@ class MeshOperations:
 
         return reoriented_poly_data, tmp_transform
 
-    def align_to_axes(self, polydata_input, skip_gingiva = True):
+    def align_to_axes(self, polydata_input, skip_gingiva = True, threshold=1):
         """
         Align the axes of the scene with the main axes of the object by PCA, for lower mesh also detects upper part of gingiva
         :param polydata_input: mesh to be aligned
@@ -94,6 +94,7 @@ class MeshOperations:
             print "flip y"
             reoriented_poly_data,trans = self.rotate_angle(reoriented_poly_data, [0, 0, 1], 180)
             tmp_transform.Concatenate(trans)
+            bounds = reoriented_poly_data.GetBounds()
 
         # decimate mesh to help computation
         dec = vtk.vtkDecimatePro()
@@ -111,7 +112,7 @@ class MeshOperations:
         curv.SetCurvatureTypeToMean()
         curv.Update()
 
-        #import renderer
+        import renderer
         # rend = renderer.Renderer()
         # rend.add_actor(curv.GetOutput(), color=[1, 1, 1], wireframe=False)
         # rend.render()
@@ -119,7 +120,7 @@ class MeshOperations:
         # get rid of too high and too low curvature (the interest points are in range [0,1])
         thres = vtk.vtkThresholdPoints()
         thres.SetInputConnection(curv.GetOutputPort())
-        thres.ThresholdBetween(0, 0.7)
+        thres.ThresholdBetween(0, threshold)
         thres.Update()
 
         #
@@ -156,8 +157,10 @@ class MeshOperations:
         randomDelaunay = vtk.vtkDelaunay2D()
         randomDelaunay.SetInputConnection(thres2.GetOutputPort())
 
+        print thres2.GetOutput().GetNumberOfPoints()
+
         # if there are not many points, increase a bit the radius
-        if thres2.GetOutput().GetNumberOfPoints() < 10000:
+        if thres2.GetOutput().GetNumberOfPoints() < 15000:
             randomDelaunay.SetAlpha(0.3)  # radius max of a point to connect with another one
         else:
             randomDelaunay.SetAlpha(0.2)
@@ -178,12 +181,17 @@ class MeshOperations:
 
         newBounds = upperGingiva.GetBounds()
 
+        # rend = renderer.Renderer()
+        # rend.add_actor(con_filter.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # rend.render()
+
         print upperGingiva.GetNumberOfCells()
         print newBounds
         print bounds
 
         # if the teeth are disconnected, only a part has been found, need to add other big regions as well
-        if not skip_gingiva and (newBounds[1] - newBounds[0] < 0.7 * (bounds[1] - bounds[0])):
+        if not skip_gingiva and (newBounds[1] - newBounds[0] < 0.7 * (bounds[1] - bounds[0])
+                                 or newBounds[3] - newBounds[2] < 0.7 * (bounds[3] - bounds[2]) ):
             con_filter = vtk.vtkPolyDataConnectivityFilter()
             con_filter.SetExtractionModeToAllRegions()
             con_filter.ColorRegionsOn()
