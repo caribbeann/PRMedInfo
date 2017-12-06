@@ -11,7 +11,7 @@ base_path = r'./image_data//'
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1 and i>13:# and i>8:
+    if i+1 >= 1:# and i>17:# and i>8:
         for side in ["lower"]:#,"upper",]:
 
             ##############################################################
@@ -51,6 +51,8 @@ for i, case in enumerate(os.listdir(base_path)):
             randomDelaunay.SetInputConnection(featureEdges.GetOutputPort())
             randomDelaunay.SetAlpha(1)
             randomDelaunay.Update()
+
+            print gingivaGravity
 
             rend = renderer.Renderer()
             rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)

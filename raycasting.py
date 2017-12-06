@@ -30,16 +30,19 @@ class RayCasting:
         pts = [None]*360#np.zeros(shape=(360, 4))
         bounds = self.poly_data.GetBounds()
         angleStep = vmaths.RadiansFromDegrees(-1.0)
-        length = bounds[3]/2-bounds[2]
+        length = bounds[3]-bounds[2]
         nbPts = 0
         nbRaysOk = 0
+        lastRay = 0
         for i in range (0,360):
             print i
-            pt = self._rayCast(center,[-length*math.sin(angleStep*i),-length*math.cos(angleStep*i),center[2]])
+            pt = self._rayCast(center,
+                               [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
             if pt != -1:
                 pts[i] = pt
                 nbPts = nbPts + len(pt)
                 nbRaysOk = nbRaysOk + 1
+                lastRay = i
             else :
                 pts[i]=-1
 
@@ -47,42 +50,86 @@ class RayCasting:
         dists = np.zeros(shape=(nbPts, nbPts))
         indexInit = -1
         i = 0
-        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint64) #idmap
+        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint32) #idmap
         current = 0
+        idmap = [None]*360
         #find first point(s)
         while indexInit == -1 and i<360:
             pt = pts[i]
             if pt!=-1:
                 indexInit = i
                 currentIdx = len(pt)
-                lastPtsDistIdx = np.arange(currentIdx)
-                lastRay = indexInit
+                previousPtsDistIdx = np.arange(currentIdx)
+                prepreviousPtsDistIdx = previousPtsDistIdx
+                previousRay = indexInit
+                prepreviousRay = previousRay
+                currentIIndices = [0]*len(pts[i])
                 for j in range(0, len(pts[i])):
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
+                    currentIIndices[j] = current
                     current = current + 1
+                idmap[i] = currentIIndices
             i = i + 1
         stop = False
-        for i in range(indexInit+1, 360):
+        gaps = vtk.vtkIdList()
+        for i in range(indexInit+1, lastRay):
             if pts[i] != -1 and not stop:
                 currentPts = pts[i]
-                lastPts = pts[lastRay]
+                previousPts = pts[previousRay]
+                prepreviousPts = pts[prepreviousRay]
+                minDist = 100
+                maxDist = 0
+                currentIIndices = [0]*len(currentPts)
                 #compute distances and store them in distance matrix
                 for j in range (0, len(currentPts)):
-                    for k in range (0,lastPtsDistIdx.size):
-                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(lastPts[k]))
-                        dists[lastPtsDistIdx[k], current] = currentDist
-                        if currentDist>10 and i-indexInit>265:
-                            stop = True
-                            print 'stop'
+                    for k in range (0,previousPtsDistIdx.size):
+                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(previousPts[k]))
+                        dists[previousPtsDistIdx[k], current] = currentDist
+                        if currentDist<minDist:
+                            minDist = currentDist
+                        if currentDist>maxDist:
+                            maxDist=currentDist
 
+                    for k in range (0,prepreviousPtsDistIdx.size):
+                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(prepreviousPts[k]))
+                        dists[prepreviousPtsDistIdx[k], current] = currentDist
+
+                    currentIIndices[j] = current
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
                     current = current + 1
+                print (minDist,maxDist,i)
+                if maxDist>1000 and i-indexInit>265:
+                    stop = True
+                    print 'stop'
+                    lastRay = i
+                elif minDist>0.15:
+                    for j in range (0, previousPtsDistIdx.size):
+                        gaps.InsertNextId(i)
+                    print "gap ",i
 
-                lastPtsDistIdx = np.arange(current-len(currentPts),current)
-                lastRay = i
+                prepreviousPtsDistIdx = previousPtsDistIdx
+                previousPtsDistIdx = np.arange(current-len(currentPts),current)
+                prepreviousRay = previousRay
+                previousRay = i
+                idmap[i] = currentIIndices
         current = current-1
+
+
+        #handle gaps
+        for i in range (0, gaps.GetNumberOfIds()):
+            gapRay = gaps.GetId(i)
+            previousPts = pts[gapRay]
+            for j in range (gapRay+1,min(gapRay+8,lastRay)):
+                currentPts = pts[j]
+                if currentPts!=-1:
+                    for k in range (0,len(currentPts)):
+                        for l in range (0, len(previousPts)):
+                            currentDist = self.distPt(np.asarray(currentPts[k]), np.asarray(previousPts[l]))
+                            dists[idmap[gapRay][l], idmap[j][k]] = currentDist #TODO
+
+
         #compute shortest path
         dist_matrix, predecessors = shortest_path(dists,method="D",directed=True,return_predecessors=True)
         minDist = dist_matrix[0,current]
@@ -213,6 +260,15 @@ class RayCasting:
 
 
     def _rayCast(self,center,point1):
+        '''
+        perform ray casting
+        throw a plane through mesh passing through given points (center, point1)
+        then compute the intersection between mesh and plane
+        cluster the intersected points and compute the points with highest z value for each cluster
+        :param center: point through which the plane must go
+        :param point1: point through which the plane must go
+        :return: the max height points for each cluster
+        '''
         # perform ray casting
         plane = vtk.vtkPlaneSource()
         plane.SetCenter(center)
@@ -234,66 +290,51 @@ class RayCasting:
 
         points = inter.GetOutput()
 
-        #print points.GetNumberOfPoints()
 
         if points.GetNumberOfPoints()==0:
             return -1
+        # if shouldPrint:
+        #     rend = renderer.Renderer()
+        #     rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
+        #     rend.add_actor(plane.GetOutput(), color=[0, 0, 1], wireframe=False)
+        #     rend.render()
 
         pts = np.zeros(shape=(points.GetNumberOfPoints(), 3))
         for i in range(0, points.GetNumberOfPoints()):
             pts[i,:] = np.asarray(points.GetPoint(i))
-        #print pts
-        # Compute DBSCAN
+
+        # Compute DBSCAN to cluster the points along rays into clusters
         db = DBSCAN(eps=1).fit(pts)
         core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
         core_samples_mask[db.core_sample_indices_] = True
         labels = db.labels_
 
-        #print labels
+        # labels with noise had -1 value, add 1 and ignore 0
         labels = labels+1
-        #print labels
 
         y = np.bincount(labels)
-        ii = np.nonzero(y)[0]
+        ii = np.nonzero(y)[0] #ignore noise
         ans = [None]*len(ii)
-        #print y
-        #print ii
         ansIdx = 0
-        for i in ii:
-
+        for i in ii: # for each non noisy cluster, compute max
             newPoints = np.zeros(shape=(points.GetNumberOfPoints(),3))
             idx = 0
-            #get points
+
+            #get points in current cluster
             for j in range (0,points.GetNumberOfPoints()):
                 if labels[j]==i:
                     newPoints[idx,:] = pts[j,:]
                     idx = idx+1
 
-            #print newPoints
-            #print db.labels_
 
-            # Number of clusters in labels, ignoring noise if present.
-            n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-
-            #print('Estimated number of clusters: %d' % n_clusters_)
-
-            # rend = renderer.Renderer()
-            # rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
-            # rend.add_actor(plane.GetOutput(), color=[0, 0, 1], wireframe=False)
-            # rend.render()
-
-
-            # find the min or max height points among the found points
+            # find the max height points among the found points
             idMax = 0
             valMax = newPoints[0,2]
-            for j in range (0, idx):#points.GetNumberOfPoints()):
-                #p = points.GetPoint(i)
+            for j in range (0, idx):
                 p = newPoints[j,:]
                 if p[2]>valMax:
                     valMax = p[2]
                     idMax = j
-            #print ans
-            #print newPoints[idMax,:]
             ans[ansIdx]=newPoints[idMax,:]
             ansIdx = ansIdx+1
-        return ans#newPoints[idMax,:]#,newPoints[idMax,1],newPoints[idMax,2]]#points.GetPoint(idMax)
+        return ans
