@@ -10,8 +10,8 @@ crop_step_size = 0.025
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1 and i>2:
-        for side in ["upper"]:#, "lower"]:
+    if i+1 >= 1:# and i>1:
+        for side in ["lower"]:#, "lower"]:
 
 
             ########################
@@ -28,11 +28,34 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # move mesh to origin in any case
 
-            reoriented_polydata, transform, gingiva = meshOp.align_to_axes(original_polydata,False,0.7)
-            suggest_line, _ = meshOp.transform(suggest_line, transform)
+            reoriented_polydata, transform, gingiva = meshOp.align_to_axes(original_polydata,True,0.7)
+
+
+            # ging = meshOp.adaptative_remove_tongue(reoriented_polydata,0.025)
+            #
+            # rend = renderer.Renderer()
+            # rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
+            # rend.add_actor(ging, color=[0, 0, 1], wireframe=False)
+            # rend.render()
+
+            gingiva = meshOp.extract(reoriented_polydata)
 
             rend = renderer.Renderer()
             rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
-            rend.add_actor(suggest_line, color=[1, 0, 1], wireframe=False)
-            rend.add_actor(gingiva, color=[1, 0, 1], wireframe=False)
+            rend.add_actor(gingiva, color=[0, 0, 1], wireframe=False)
             rend.render()
+
+            #test, transform, gingiva = meshOp.align_to_axes(ging, False, 0.7)
+
+            # rend = renderer.Renderer()
+            # rend.add_actor(test, color=[0, 0, 1], wireframe=False)
+            # rend.render()
+
+            # suggest_line, _ = meshOp.transform(suggest_line, transform)
+            #
+            # rend = renderer.Renderer()
+            # rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
+            # rend.add_actor(suggest_line, color=[1, 0, 1], wireframe=False)
+            # rend.add_actor(gingiva, color=[1, 0, 1], wireframe=False)
+            # rend.add_actor(ging, color=[0, 0, 1], wireframe=False)
+            # rend.render()

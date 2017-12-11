@@ -11,7 +11,7 @@ base_path = r'./image_data//'
 
 for i, case in enumerate(os.listdir(base_path)):
     print case
-    if i+1 >= 1:# and i>1:# and i>17:# and i>8:
+    if i+1 >= 1:# and i>8:# and i>1:# and i>17:# and i>8:
         for side in ["lower"]:#,"lower",]:
 
             ##############################################################
@@ -31,11 +31,12 @@ for i, case in enumerate(os.listdir(base_path)):
 
 
             # Reorient data
-            polydata,transform,gingiva = meshOp.align_to_axes(polydata,False,0.7)
-            gingivaGravity = meshOp.compute_center_of_mass(gingiva)
+            if side=="lower":
+                polydata,transform,gingiva = meshOp.align_to_axes(polydata,False,0.7)
+            else:
+                polydata, transform, gingiva = meshOp.align_to_axes(polydata, True, 0.7)
             suggest_line, _ = meshOp.transform(suggest_line, transform)
 
-            bounds = gingiva.GetBounds()
 
 
             featureEdges = vtk.vtkFeatureEdges()
@@ -52,7 +53,6 @@ for i, case in enumerate(os.listdir(base_path)):
             randomDelaunay.SetAlpha(1)
             randomDelaunay.Update()
 
-            print gingivaGravity
 
             rend = renderer.Renderer()
             rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)
@@ -67,12 +67,26 @@ for i, case in enumerate(os.listdir(base_path)):
             ### The planes will intersect with the polydata on some points, and for each plane the point with the highest z is computed
             ### All points with highest z components are returned by findPoints
 
-            center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
             if side=="lower":
+                bounds = gingiva.GetBounds()
+                gingivaGravity = meshOp.compute_center_of_mass(gingiva)
+                center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
                 rayC = raycasting.RayCasting(poly_data=randomDelaunay.GetOutput())
                 points = rayC.findPoints(center)
             else:
-                rayC = raycasting.RayCasting(poly_data=polydata)
+                gingiva = meshOp.extract(polydata)
+
+                #ging = meshOp.remove_tongue(gingiva, 0.02)
+                #test, transform, gingiva = meshOp.align_to_axes(ging, False, 0.7)
+
+                # rend = renderer.Renderer()
+                # rend.add_actor(test, color=[0, 0, 1], wireframe=False)
+                # rend.render()
+
+                bounds = gingiva.GetBounds()
+                gingivaGravity = meshOp.compute_center_of_mass(gingiva)
+                center = [gingivaGravity[0], gingivaGravity[1], bounds[5]]
+                rayC = raycasting.RayCasting(poly_data=gingiva)
                 points = rayC.findPointsOld(center)
 
 
@@ -126,7 +140,7 @@ for i, case in enumerate(os.listdir(base_path)):
 
             # Smooth and weight smoothed with firstTest, then smooth again and find points on mesh
             smth = smoothing.Smoothing()
-            rays = smth.weightedCombination(rays, 200, 0.1)  # smoothing + weighting smoothing with firstTest
+            rays = smth.weightedCombination(rays, 200,0.1)#200, 0.1)  # smoothing + weighting smoothing with firstTest
             alv_line_points = smth.smooth(rays, 50, 0.1)  # smooth again (but less) => points are NOT on the mesh but have right curve
 
 

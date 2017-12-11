@@ -182,19 +182,35 @@ class RayCasting:
             vmaths = vtk.vtkMath()
             points = vtk.vtkPoints()
             bounds = self.poly_data.GetBounds()
+            maxDist = 0
+            idMax = 0
             firstCorner = [bounds[0], bounds[2], center[2]]
             # thetaInit = vmaths.AngleBetweenVectors([0.0,1.0,0.0],[bounds[0],bounds[2],0.0])
             angleStep = vmaths.RadiansFromDegrees(-1.0)
             length = bounds[3] / 2 - bounds[2]
+            lastPt = -1
+            idx = 0
             for i in range(0, 360):
                 print i
-                pt = self._rayCast(center,
+                pt = self._rayCastOld(center,
                                    [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
                 if pt != -1:
                     points.InsertNextPoint(pt)
-                    # else :
-                    #    points.InsertNextPoint([0.0,0.0,0.0])
-            return points
+                    idx = idx+1
+                    if lastPt!=-1:
+                        currentDist = self.distPt(np.asarray(pt),np.asarray(lastPt))
+                        if currentDist>maxDist:
+                            maxDist = currentDist
+                            idMax = idx
+                    lastPt = pt
+            if self.distPt(np.asarray(lastPt),np.asarray(points.GetPoint(0)))>maxDist:
+                idMax=0
+
+            #reorder
+            finalPoints = vtk.vtkPoints()
+            for i in range(0, points.GetNumberOfPoints()):
+                finalPoints.InsertNextPoint(points.GetPoint((idMax+i)%points.GetNumberOfPoints()))
+            return finalPoints
 
     # def goUpward(self,line):
     #     points = vtk.vtkPoints()
@@ -222,7 +238,7 @@ class RayCasting:
     #             print ":'("
     #     return points            
 
-    def _constrainedRayCast(self,center,point1):
+    def _rayCastOld(self,center,point1):
         # perform ray casting
         plane = vtk.vtkPlaneSource()
         plane.SetCenter(center)
@@ -244,19 +260,16 @@ class RayCasting:
 
         points = inter.GetOutput()
 
-        print points.GetNumberOfPoints()
-
         if points.GetNumberOfPoints()==0:
             return -1
 
         idMax = 0
-        if maxZ == True:  # maximize Z
-            valMax = points.GetPoint(0)[2]
-            for i in range(0, points.GetNumberOfPoints()):
-                p = points.GetPoint(i)
-                if p[2] > valMax:
-                    valMax = p[2]
-                    idMax = i
+        valMax = points.GetPoint(0)[2]
+        for i in range(0, points.GetNumberOfPoints()):
+            p = points.GetPoint(i)
+            if p[2] > valMax:
+                valMax = p[2]
+                idMax = i
 
         return points.GetPoint(idMax)
 

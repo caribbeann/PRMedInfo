@@ -779,6 +779,280 @@ class MeshOperations:
 
         return gradients.GetOutput()
 
+    def extract(self, input_poly, threshold=0.02):
+        """
+        Removes the border (border region) of the passed vtkPolyData.
+        To do this, a gradient field of elevation is built.
+        Then, a gradient magnitude is built in each point of the mesh
+        The removal starts at the point on the mesh corresponding to the center of mass.
+        The neighboring points are then recursively removed if the gradient magnitude at that position is below a
+            threshold.
+        Method assumes that the mesh was previously aligned with its lowest dimension (3rd eigenvector) along Z axis.
+        :param input_poly:
+        :param threshold: remove
+        :return: same vtkPolyData that was passed, but with tongue (center region removed)
+        """
+
+        bounds = input_poly.GetBounds()
+
+        polydata = input_poly
+
+        con_filter = vtk.vtkPolyDataConnectivityFilter()
+        con_filter.SetExtractionModeToLargestRegion()
+        con_filter.SetInputData(polydata)
+        con_filter.Update()
+        polydata = con_filter.GetOutput()
+        polydata, _ = self.translate_to_xy_plane(polydata)
+
+        # compute gradient
+        gradient = self.compute_elevation_gradient(polydata)
+
+        # gradientVals = np.zeros(polydata.GetNumberOfPoints())
+        # for i in range (0, polydata.GetNumberOfPoints()):
+        #     gt = gradient.GetPointData().GetArray("Gradients").GetTuple(i)
+        #     m = math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+        #     gradientVals[i] = m
+        #
+        #
+        # print gradient.GetPoint(0)
+        # print polydata.GetPoint(0)
+        # print np.mean(gradientVals)
+        # minVal = np.min(gradientVals)
+        # stdev = np.std(gradientVals)
+        # print stdev
+        #
+        # threshold = minVal+2*stdev
+        #
+        # skeleton_points_final = vtk.vtkPoints()  # here we add the points that we find
+        # for i in range(0, polydata.GetNumberOfPoints()):
+        #     if gradientVals[i]<threshold:
+        #         skeleton_points_final.InsertNextPoint(gradient.GetPoint(i))
+        #
+        #
+        # skeleton_final = vtk.vtkPolyData()
+        # skeleton_final.SetPoints(skeleton_points_final)
+        #
+        # randomDelaunay = vtk.vtkDelaunay2D()
+        # randomDelaunay.SetInputData(skeleton_final)
+        # randomDelaunay.SetAlpha(0.8)
+        # randomDelaunay.Update()
+        # #skeleton_final.SetLines(whole_line_final)
+        # # import renderer
+        # # rend = renderer.Renderer()
+        # # rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)
+        # # rend.render()
+
+        elevVals = np.zeros(polydata.GetNumberOfPoints())
+        for i in range(0, polydata.GetNumberOfPoints()):
+            gt = gradient.GetPointData().GetArray("Elevation").GetTuple(i)
+            m = gt[0]#math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+            elevVals[i] = m
+
+        print gradient.GetPoint(0)
+        print polydata.GetPoint(0)
+        print np.mean(elevVals)
+        minVal = np.min(elevVals)
+        print np.max(elevVals)
+        stdev = np.std(elevVals)
+        print stdev
+
+        threshold = np.mean(elevVals) + 0.75*stdev#minVal + 2 * stdev
+
+        skeleton_points_final = vtk.vtkPoints()  # here we add the points that we find
+        for i in range(0, polydata.GetNumberOfPoints()):
+            if elevVals[i] > threshold:
+                skeleton_points_final.InsertNextPoint(gradient.GetPoint(i))
+
+        skeleton_final = vtk.vtkPolyData()
+        skeleton_final.SetPoints(skeleton_points_final)
+
+        randomDelaunay = vtk.vtkDelaunay2D()
+        randomDelaunay.SetInputData(skeleton_final)
+        randomDelaunay.SetAlpha(0.8)
+        randomDelaunay.Update()
+
+
+        return randomDelaunay.GetOutput()
+
+    def remove_border(self, input_poly, threshold=0.02):
+        """
+        Removes the border (border region) of the passed vtkPolyData.
+        To do this, a gradient field of elevation is built.
+        Then, a gradient magnitude is built in each point of the mesh
+        The removal starts at the point on the mesh corresponding to the center of mass.
+        The neighboring points are then recursively removed if the gradient magnitude at that position is below a
+            threshold.
+        Method assumes that the mesh was previously aligned with its lowest dimension (3rd eigenvector) along Z axis.
+        :param input_poly:
+        :param threshold: remove
+        :return: same vtkPolyData that was passed, but with tongue (center region removed)
+        """
+
+        bounds = input_poly.GetBounds()
+        gravity = self.compute_center_of_mass(input_poly)
+
+        polydata = input_poly
+        edge_locator = vtk.vtkCellLocator()
+        edge_locator.SetDataSet(polydata)
+        edge_locator.BuildLocator()
+
+        featureEdges = vtk.vtkFeatureEdges()
+
+        featureEdges.SetInputData(polydata)  # get basis
+        featureEdges.BoundaryEdgesOn()
+        featureEdges.FeatureEdgesOff()
+        featureEdges.ManifoldEdgesOff()
+        featureEdges.NonManifoldEdgesOff()
+        featureEdges.Update()
+        edge_poly = featureEdges.GetOutput()
+
+        ptIds = vtk.vtkIdList()
+        for i in range(0, edge_poly.GetNumberOfPoints()):
+            ptIds.InsertNextId(polydata.FindPoint(edge_poly.GetPoint(i)))
+        #
+        # con_filter = vtk.vtkPolyDataConnectivityFilter()
+        # con_filter.SetExtractionModeToLargestRegion()
+        # con_filter.SetInputData(polydata)
+        # con_filter.Update()
+        # polydata = con_filter.GetOutput()
+        # polydata, _ = self.translate_to_xy_plane(polydata)
+
+        # compute gradient
+        gradient = self.compute_elevation_gradient(polydata)
+
+        while ptIds.GetNumberOfIds() > 0:
+
+            # get neighboring cells
+            neighborsCellIds = vtk.vtkIdList()
+            polydata.GetPointCells(ptIds.GetId(0), neighborsCellIds)
+
+            # from each cell, get the points that compose it
+            for i in range(0, neighborsCellIds.GetNumberOfIds()):
+                cellId = neighborsCellIds.GetId(i)
+
+                newPtIds = vtk.vtkIdList()
+                if polydata.GetCell(cellId).GetCellType() != vtk.VTK_EMPTY_CELL:  # if cell was not marked as deleted
+                    # get the points of these cell
+                    polydata.GetCellPoints(cellId, newPtIds)
+                    for j in range(0, newPtIds.GetNumberOfIds()):
+                        # insert these points to the set if they meet the requirements
+                        newPtId = newPtIds.GetId(j)
+                        gt = gradient.GetPointData().GetArray("Gradients").GetTuple(newPtId)
+                        m = math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+                        if m < threshold:
+                            ptIds.InsertNextId(newPtId)
+                polydata.DeleteCell(cellId)  # mark it so we know it was already traversed
+
+            polydata.DeletePoint(ptIds.GetId(0))
+            ptIds.DeleteId(ptIds.GetId(0))
+
+        polydata.RemoveDeletedCells()
+        polydata.BuildCells()
+
+
+        #polydata = self.extract_largest_region(polydata)
+
+        return polydata
+
+    def adaptative_remove_tongue(self, input_poly, threshold=0.02):
+        """
+        Removes the tongue (central region) of the passed vtkPolyData.
+        To do this, a gradient field of elevation is built.
+        Then, a gradient magnitude is built in each point of the mesh
+        The removal starts at the point on the mesh corresponding to the center of mass.
+        The neighboring points are then recursively removed if the gradient magnitude at that position is below a
+            threshold.
+        Method assumes that the mesh was previously aligned with its lowest dimension (3rd eigenvector) along Z axis.
+        :param input_poly:
+        :param threshold: remove
+        :return: same vtkPolyData that was passed, but with tongue (center region removed)
+        """
+
+        bounds = input_poly.GetBounds()
+        gravity = self.compute_center_of_mass(input_poly)
+
+        polydata = input_poly
+        edge_locator = vtk.vtkCellLocator()
+        edge_locator.SetDataSet(polydata)
+        edge_locator.BuildLocator()
+
+        pcoord = [0.0, 0.0, 0.0]  # will contain the coords of the intersection of a vertical line with the mesh through the c.o.m.
+        junk = [0.0, 0.0, 0.0]
+        t = vtk.mutable(0)
+        subId = vtk.mutable(0)
+        centerCellId = vtk.mutable(0)
+        cell = vtk.vtkGenericCell()
+        nr = edge_locator.IntersectWithLine([gravity[0], gravity[1], bounds[4] + 1],
+                                            [gravity[0], gravity[1], bounds[5] - 1], 0.001, t, pcoord, junk, subId,
+                                            centerCellId, cell)
+
+        con_filter = vtk.vtkPolyDataConnectivityFilter()
+        con_filter.SetExtractionModeToLargestRegion()
+        con_filter.SetInputData(polydata)
+        con_filter.Update()
+        polydata = con_filter.GetOutput()
+        #polydata, _ = self.translate_to_xy_plane(polydata)
+
+        # compute gradient
+        gradient = self.compute_elevation_gradient(polydata)
+
+
+        gradientVals = np.zeros(polydata.GetNumberOfPoints())
+        for i in range(0, polydata.GetNumberOfPoints()):
+            gt = gradient.GetPointData().GetArray("Elevation").GetTuple(i)
+            #m = math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+            gradientVals[i] = gt[0]#m
+
+        meanVal = np.mean(gradientVals)
+        stdev = np.std(gradientVals)
+        print np.max(gradientVals)
+        print meanVal
+        print np.min(gradientVals)
+        print stdev
+
+
+        neighborsCellIds = vtk.vtkIdList()
+        neighborsCellIds.InsertNextId(centerCellId)
+
+        # at the beginning this contains only the c.o.m
+        ptIds = vtk.vtkIdList()
+        ptIds.InsertNextId(polydata.FindPoint(pcoord))
+
+        while ptIds.GetNumberOfIds() > 0:
+
+            # get neighboring cells
+            neighborsCellIds = vtk.vtkIdList()
+            polydata.GetPointCells(ptIds.GetId(0), neighborsCellIds)
+
+            # from each cell, get the points that compose it
+            for i in range(0, neighborsCellIds.GetNumberOfIds()):
+                cellId = neighborsCellIds.GetId(i)
+
+                newPtIds = vtk.vtkIdList()
+                if polydata.GetCell(cellId).GetCellType() != vtk.VTK_EMPTY_CELL:  # if cell was not marked as deleted
+                    # get the points of these cell
+                    polydata.GetCellPoints(cellId, newPtIds)
+                    for j in range(0, newPtIds.GetNumberOfIds()):
+                        # insert these points to the set if they meet the requirements
+                        newPtId = newPtIds.GetId(j)
+                        gt = gradient.GetPointData().GetArray("Elevation").GetTuple(newPtId)
+                        m = gt[0]#math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+                        if m < meanVal-stdev:
+                            ptIds.InsertNextId(newPtId)
+                polydata.DeleteCell(cellId)  # mark it so we know it was already traversed
+
+            polydata.DeletePoint(ptIds.GetId(0))
+            ptIds.DeleteId(ptIds.GetId(0))
+
+        polydata.RemoveDeletedCells()
+        polydata.BuildCells()
+
+
+        polydata = self.extract_largest_region(polydata)
+
+        return polydata
+
+
     def remove_tongue(self, input_poly, threshold=0.02):
         """
         Removes the tongue (central region) of the passed vtkPolyData.
@@ -816,7 +1090,7 @@ class MeshOperations:
         con_filter.SetInputData(polydata)
         con_filter.Update()
         polydata = con_filter.GetOutput()
-        polydata, _ = self.translate_to_xy_plane(polydata)
+        #polydata, _ = self.translate_to_xy_plane(polydata)
 
         # compute gradient
         gradient = self.compute_elevation_gradient(polydata)
