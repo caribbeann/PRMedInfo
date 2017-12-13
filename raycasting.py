@@ -182,6 +182,258 @@ class RayCasting:
         print lastRay-indexInit
         return points
 
+    def findPointsInterp(self,center):
+        vmaths = vtk.vtkMath()
+        pts = [None]*360
+        bounds = self.poly_data.GetBounds()
+        angleStep = vmaths.RadiansFromDegrees(-1.0)
+        length = bounds[3]-bounds[2]
+        nbPts = 0
+        nbRaysOk = 0
+        lastRay = 0
+        indexInit = -1
+
+
+        # perform ray casting and store it in pts
+        for i in range (0,360):
+            print i
+            pt = self._rayCast(center,
+                                   [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
+            if pt != -1:
+                nbPts = nbPts + len(pt)
+                nbRaysOk = nbRaysOk + 1
+                lastRay = i
+                if indexInit==-1:
+                    indexInit=i
+            pts[i]=pt
+
+
+        # tri = vtk.vtkTriangleFilter()
+        # tri.SetInputData(otherPolydata)
+        # tri.Update()
+        # if lastRay-indexInit<265:
+        #     rangeMin = max(0,indexInit-10)
+        #     indexInit=rangeMin
+        # center[2]=otherPolydata.GetBounds()[5]
+        # rangeMax = lastRay#max(lastRay, min(lastRay+10, 359))
+        # for i in range(indexInit, rangeMax):
+        #     if pts[i] == -1:
+        #         pt = self._rayCast(center,
+        #                                [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i),
+        #                                 center[2]], otherPolydata, tri.GetOutput())
+        #         if pt!=-1:
+        #             print i,pt
+        #             pts[i]=pt
+        #             nbPts = nbPts+len(pt)
+        #             # if i > lastRay:
+        #             #     lastRay = i
+
+
+        # compute distances
+        dists = np.zeros(shape=(nbPts, nbPts))
+        i = 0
+        ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint32) # stores ray nb and pt index in ray, index = id in dists
+        current = 0
+        idmap = [None]*360 # idmap : stores the id (in dist) for each point (i corresponds to ray, j to pt index in ray)
+
+
+        #init first point(s)
+        previousPtsDistIdx = np.arange(len(pts[indexInit]))
+        prepreviousPtsDistIdx = previousPtsDistIdx
+        previousRay = indexInit
+        prepreviousRay = previousRay
+        currentIIndices = [0]*len(pts[indexInit])
+        for j in range(0, len(pts[indexInit])):
+            ptIds[current, 0] = indexInit
+            ptIds[current, 1] = j
+            currentIIndices[j] = current
+            current = current + 1
+        idmap[indexInit] = currentIIndices
+
+
+        stop = False
+
+        emptyRays = vtk.vtkIdList()
+
+        gaps = vtk.vtkIdList()
+        for i in range(indexInit+1, lastRay):
+            if pts[i] != -1 and not stop:
+                currentPts = pts[i]
+                previousPts = pts[previousRay]
+                prepreviousPts = pts[prepreviousRay]
+                minDist = 10000
+                maxDist = 0
+                currentIIndices = [0]*len(currentPts)
+                #compute distances and store them in distance matrix
+                for j in range (0, len(currentPts)):
+                    for k in range (0,previousPtsDistIdx.size):
+                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(previousPts[k]))
+                        dists[previousPtsDistIdx[k], current] = currentDist
+                        if currentDist<minDist:
+                            minDist = currentDist
+                        if currentDist>maxDist:
+                            maxDist=currentDist
+                        if currentDist==0:
+                            print i,j,k,currentPts[j],previousPts[k]
+                    #compute distances with points before previous points
+                    for k in range (0,prepreviousPtsDistIdx.size):
+                        currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(prepreviousPts[k]))
+                        dists[prepreviousPtsDistIdx[k], current] = currentDist
+
+                    currentIIndices[j] = current
+                    ptIds[current, 0] = i
+                    ptIds[current, 1] = j
+                    current = current + 1
+                if maxDist>1000:
+                    print ">1000",maxDist," ",minDist," ",i
+                if maxDist>1000 and i-indexInit>265:
+                    stop = True
+                    print 'stop'
+                    lastRay = i #this was the last ray
+                elif minDist>0.15:
+                    for j in range (0, previousPtsDistIdx.size):
+                        gaps.InsertNextId(i)
+
+                prepreviousPtsDistIdx = previousPtsDistIdx
+                previousPtsDistIdx = np.arange(current-len(currentPts),current)
+                prepreviousRay = previousRay
+                previousRay = i
+                idmap[i] = currentIIndices
+            else:
+                emptyRays.InsertNextId(i)
+        current = current-1
+
+
+        #handle gaps : if there is a gap, add links from point to until points from ray 7 rays after the current point's ray
+        for i in range (0, gaps.GetNumberOfIds()):
+            gapRay = gaps.GetId(i)
+            previousPts = pts[gapRay]
+            for j in range (gapRay+1,min(gapRay+8,lastRay)):
+                currentPts = pts[j]
+                if currentPts!=-1:
+                    for k in range (0,len(currentPts)):
+                        for l in range (0, len(previousPts)):
+                            currentDist = self.distPt(np.asarray(currentPts[k]), np.asarray(previousPts[l]))
+                            dists[idmap[gapRay][l], idmap[j][k]] = currentDist #TODO
+
+
+        #compute shortest path
+        dist_matrix, predecessors = shortest_path(dists,method="D",directed=True,return_predecessors=True)
+
+        #find optima (which of the potential several init and end points should be taken :
+        # the ones that minimize the total distance
+        minDist = dist_matrix[0,current]
+        optima = (0,current)
+        for i in range (0,len(pts[indexInit])):
+            for j in range(current-len(pts[lastRay]),current):
+                curDist = dist_matrix[i,j]
+                if curDist<minDist:
+                    optima = (i,j)
+
+        points = np.zeros(shape=(lastRay-indexInit,3))
+        current = optima[1]
+        index = 0
+        midPoint = -1
+
+
+        #pointsVTK = vtk.vtkPoints()
+        # loop in the predecessor list to create the points, from last point to first point
+        while current!=optima[0]:
+            pt = pts[ptIds[current, 0]][ptIds[current, 1]]
+            points[index]=[pt[0],pt[1],pt[2]]
+            current = predecessors[optima[0],current]
+            if current<180 and midPoint==-1:
+                midPoint=index
+            index = index + 1
+
+        print index
+        print emptyRays.GetNumberOfIds()
+
+        # import matplotlib.pyplot as plt
+        # plt.plot(points[:index,0], points[:index,1], 'o')#, points[:index,0], f(points[:index,0]), '-', points[:index,0], f2(points[:index,0]), '--')
+        # plt.show()
+
+        from scipy import interpolate
+        #f = interpolate.UnivariateSpline(points[:index,0], points[:index,1])
+        retour = interpolate.splprep(points[:index,0:2].T,s=100,nest=10,full_output=1)#,s=100000)#,s=900)
+
+        tck = retour[0][0]
+        u = retour[0][1]
+        print u
+        fp = retour[1]
+        print fp
+        #xnew = np.linspace(0.0,1.0,300)
+        interp0 =  interpolate.splev(u, tck, der=0)
+
+        print "-----------"
+        print interp0
+
+        firstRealIndex = -1
+        lastRealIndex = -1
+
+        lastPtX = interp0[0][0]
+
+        for i in range (1, interp0[0].size):
+            currentX = interp0[0][i]
+            print i, currentX
+            if currentX<lastPtX:
+                if currentX<0:
+                    firstRealIndex = i
+                else:
+                    if firstRealIndex!=-1:
+                        lastRealIndex = i-1
+                        break
+            lastPtX = currentX
+
+        if firstRealIndex==-1:
+            firstRealIndex=0
+        if lastRealIndex ==-1:
+            lastRealIndex = index
+
+        print firstRealIndex, lastRealIndex
+        retour = interpolate.splprep(points[firstRealIndex:lastRealIndex, 0:2].T, s=20, nest=6, full_output=1)  # ,s=100000)#,s=900)
+
+        tck = retour[0][0]
+        u = retour[0][1]
+        fp = retour[1]
+        print fp, tck
+        xnew = np.linspace(0.0, 1.0, 300)
+        interp = interpolate.splev(xnew, tck, der=0)
+
+        # newX = np.linspace(points[0,0], max(points[index-1,0],points[index-2,0],points[index-3,0]), 300)
+        # newY = f(newX)
+        # print newX
+        # print newY
+        # #print f2.get_residual()
+        # import matplotlib.pyplot as plt
+        # plt.plot(points[:index,0], points[:index,1], 'o', interp0[0],interp0[1],'-', interp[0],interp[1],'--')
+        # plt.show()
+        #
+        # plt.plot(points[:index, 0], points[:index, 1], 'o',newY[0],newY[1], '-')
+        # plt.show()
+
+        #
+        # print finalPoints
+        # leftYRange = points.GetPoint(midPoint-1)[1] - pts[ptIds[optima[1], 0]][ptIds[optima[1], 1][1]]
+        # rightYRange = points.GetPoint(midPoint)[1] - pts[ptIds[optima[0], 0]][ptIds[optima[0], 1][1]]
+        #
+        # print leftYRange,rightYRange
+
+
+        # if leftYRange<0.8*rightYRange or rightYRange<0.8*leftYRange:
+        #     print "coucou left right"
+        #
+        #     if rightYRange<0.8*leftYRange:
+        #         distances = np.zeros(shape=(10, 3))
+        #         for i in range(0, 10):
+        #             distances[i] = alv_line_points[len(alv_line_points) - 1 - i] - alv_line_points[len(alv_line_points) - 2 - i]
+        #         distances = np.mean(distances, 0)
+        #         number = abs(int(0.75 * (leftRange - rightRange) / distances[1]))
+
+
+        return interp[0],interp[1]#finalPoints
+
+
     def findPoints2(self,line,maxZ,windowSize):
         vmaths = vtk.vtkMath()
         points = vtk.vtkPoints()
