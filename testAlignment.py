@@ -11,7 +11,7 @@ crop_step_size = 0.025
 for i, case in enumerate(os.listdir(base_path)):
     print case
     if i+1 >= 1:# and i>1:
-        for side in ["lower"]:#, "lower"]:
+        for side in ["upper"]:#, "lower"]:
 
 
             ########################
@@ -30,32 +30,17 @@ for i, case in enumerate(os.listdir(base_path)):
 
             reoriented_polydata, transform, gingiva = meshOp.align_to_axes(original_polydata,True,0.7)
 
+            dec = vtk.vtkDecimatePro()
+            dec.SetInputData(reoriented_polydata)
+            dec.SetTargetReduction(0.001)
+            dec.PreserveTopologyOff()
+            dec.SplittingOn()
+            dec.BoundaryVertexDeletionOn()
+            dec.Update()
 
-            # ging = meshOp.adaptative_remove_tongue(reoriented_polydata,0.025)
-            #
-            # rend = renderer.Renderer()
-            # rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
-            # rend.add_actor(ging, color=[0, 0, 1], wireframe=False)
-            # rend.render()
-
-            gingiva = meshOp.extract(reoriented_polydata)
+            gingiva = meshOp.extract(dec.GetOutput())#-0.5)
 
             rend = renderer.Renderer()
             rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
             rend.add_actor(gingiva, color=[0, 0, 1], wireframe=False)
             rend.render()
-
-            #test, transform, gingiva = meshOp.align_to_axes(ging, False, 0.7)
-
-            # rend = renderer.Renderer()
-            # rend.add_actor(test, color=[0, 0, 1], wireframe=False)
-            # rend.render()
-
-            # suggest_line, _ = meshOp.transform(suggest_line, transform)
-            #
-            # rend = renderer.Renderer()
-            # rend.add_actor(reoriented_polydata, color=[1, 1, 1], wireframe=False)
-            # rend.add_actor(suggest_line, color=[1, 0, 1], wireframe=False)
-            # rend.add_actor(gingiva, color=[1, 0, 1], wireframe=False)
-            # rend.add_actor(ging, color=[0, 0, 1], wireframe=False)
-            # rend.render()

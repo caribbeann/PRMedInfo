@@ -112,10 +112,6 @@ class MeshOperations:
         curv.SetCurvatureTypeToMean()
         curv.Update()
 
-        import renderer
-        # rend = renderer.Renderer()
-        # rend.add_actor(curv.GetOutput(), color=[1, 1, 1], wireframe=False)
-        # rend.render()
 
         # get rid of too high and too low curvature (the interest points are in range [0,1])
         thres = vtk.vtkThresholdPoints()
@@ -123,11 +119,7 @@ class MeshOperations:
         thres.ThresholdBetween(0, threshold)
         thres.Update()
 
-        #
-        # import renderer
-        # rend = renderer.Renderer()
-        # rend.add_actor(thres.GetOutput(), color=[1, 1, 1], wireframe=False)
-        # rend.render()
+
 
         # there are still too many points (with flat points as well), need to get rid of them by using mean and std
         scalarValues = thres.GetOutput().GetPointData().GetScalars()
@@ -138,26 +130,16 @@ class MeshOperations:
         valMean = np.mean(vals)
         stdev = np.std(vals)
 
-        print valMean
-        print stdev
-
 
         thres2 = vtk.vtkThresholdPoints()
         thres2.SetInputConnection(thres.GetOutputPort())
         thres2.ThresholdBetween(valMean - 2 * stdev, valMean + 2* stdev)
         thres2.Update()
 
-        # import renderer
-        # rend = renderer.Renderer()
-        # rend.add_actor(thres2.GetOutput(), color=[1, 1, 1], wireframe=False)
-        # rend.render()
-
 
         # the result is a cloud of points, need to build a polydata, but only when points are close enough to one other
         randomDelaunay = vtk.vtkDelaunay2D()
         randomDelaunay.SetInputConnection(thres2.GetOutputPort())
-
-        print thres2.GetOutput().GetNumberOfPoints()
 
         # if there are not many points, increase a bit the radius
         if thres2.GetOutput().GetNumberOfPoints() < 15000:
@@ -167,9 +149,6 @@ class MeshOperations:
         randomDelaunay.Update()
 
 
-        # rend = renderer.Renderer()
-        # rend.add_actor(randomDelaunay.GetOutput(), color=[1, 1, 1], wireframe=False)
-        # rend.render()
 
         # get biggest component
         con_filter = vtk.vtkPolyDataConnectivityFilter()
@@ -179,43 +158,44 @@ class MeshOperations:
         upperGingiva = vtk.vtkPolyData()
         upperGingiva.DeepCopy(con_filter.GetOutput())
 
-        newBounds = upperGingiva.GetBounds()
+        gingBounds = upperGingiva.GetBounds()
 
-        # rend = renderer.Renderer()
-        # rend.add_actor(con_filter.GetOutput(), color=[1, 1, 1], wireframe=False)
-        # rend.render()
 
-        print upperGingiva.GetNumberOfCells()
-        print newBounds
-        print bounds
 
         # if the teeth are disconnected, only a part has been found, need to add other big regions as well
-        if not skip_gingiva and (newBounds[1] - newBounds[0] < 0.7 * (bounds[1] - bounds[0])
-                                 or newBounds[3] - newBounds[2] < 0.7 * (bounds[3] - bounds[2]) ):
-            con_filter = vtk.vtkPolyDataConnectivityFilter()
-            con_filter.SetExtractionModeToAllRegions()
-            con_filter.ColorRegionsOn()
-            con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
-            con_filter.ScalarConnectivityOff()
-            con_filter.Update()
+        if not skip_gingiva:
 
-            nbRegions = con_filter.GetNumberOfExtractedRegions()
-            con_filter.InitializeSpecifiedRegionList()
 
-            previousCellNb = 0
+            gingXRange = gingBounds[1] - gingBounds[0]
+            gingYRange = gingBounds[3] - gingBounds[2]
 
-            for i in range(0, nbRegions):
-                con_filter.SetExtractionModeToSpecifiedRegions()
-                con_filter.AddSpecifiedRegion(i)  # add a region to the selection
+
+            # check if the found gingiva is too small
+            if (gingXRange < 0.7 * (bounds[1] - bounds[0])
+                                 or gingYRange < 0.7 * (bounds[3] - bounds[2]) ):
+                con_filter = vtk.vtkPolyDataConnectivityFilter()
+                con_filter.SetExtractionModeToAllRegions()
+                con_filter.ColorRegionsOn()
+                con_filter.SetInputConnection(randomDelaunay.GetOutputPort())
+                con_filter.ScalarConnectivityOff()
                 con_filter.Update()
-                nbCells = con_filter.GetOutput().GetNumberOfCells()
-                if nbCells - previousCellNb < 200:  # get only big regions
-                    con_filter.DeleteSpecifiedRegion(i)  # do not keep the region (delete from selection)
-                previousCellNb = nbCells  # contains all cells except the ones from deleted regions
-            upperGingiva.DeepCopy(con_filter.GetOutput())
+
+                nbRegions = con_filter.GetNumberOfExtractedRegions()
+                con_filter.InitializeSpecifiedRegionList()
+
+                previousCellNb = 0
+
+                for i in range(0, nbRegions):
+                    con_filter.SetExtractionModeToSpecifiedRegions()
+                    con_filter.AddSpecifiedRegion(i)  # add a region to the selection
+                    con_filter.Update()
+                    nbCells = con_filter.GetOutput().GetNumberOfCells()
+                    if nbCells - previousCellNb < 200:  # get only big regions
+                        con_filter.DeleteSpecifiedRegion(i)  # do not keep the region (delete from selection)
+                    previousCellNb = nbCells  # contains all cells except the ones from deleted regions
+                upperGingiva.DeepCopy(con_filter.GetOutput())
 
         newGravity = self.compute_center_of_mass(upperGingiva)
-        print newGravity
 
 
         # the upper part of teeth has been extracted, as the mesh is centered on the center of mass of initial polydata
@@ -779,7 +759,59 @@ class MeshOperations:
 
         return gradients.GetOutput()
 
-    def extract(self, input_poly, threshold=0.02):
+    def extractGradient(self, input_poly):
+        """
+        Removes the border (border region) of the passed vtkPolyData.
+        To do this, a gradient field of elevation is built.
+        Then, a gradient magnitude is built in each point of the mesh
+        The removal starts at the point on the mesh corresponding to the center of mass.
+        The neighboring points are then recursively removed if the gradient magnitude at that position is below a
+            threshold.
+        Method assumes that the mesh was previously aligned with its lowest dimension (3rd eigenvector) along Z axis.
+        :param input_poly:
+        :return: same vtkPolyData that was passed, but with tongue (center region removed)
+        """
+
+        bounds = input_poly.GetBounds()
+
+        polydata = input_poly
+
+        con_filter = vtk.vtkPolyDataConnectivityFilter()
+        con_filter.SetExtractionModeToLargestRegion()
+        con_filter.SetInputData(polydata)
+        con_filter.Update()
+        polydata = con_filter.GetOutput()
+        polydata, _ = self.translate_to_xy_plane(polydata)
+
+        # compute gradient
+        gradient = self.compute_elevation_gradient(polydata)
+
+        gradientVals = np.zeros(polydata.GetNumberOfPoints())
+        for i in range (0, polydata.GetNumberOfPoints()):
+            gt = gradient.GetPointData().GetArray("Gradients").GetTuple(i)
+            m = math.sqrt(gt[0] ** 2 + gt[1] ** 2 + gt[2] ** 2)
+            gradientVals[i] = m
+
+
+        threshold = np.mean(gradientVals)#+2.5*stdev
+
+        skeleton_points_final = vtk.vtkPoints()  # here we add the points that we find
+        for i in range(0, polydata.GetNumberOfPoints()):
+            if gradientVals[i]<threshold:
+                skeleton_points_final.InsertNextPoint(gradient.GetPoint(i))
+
+
+        skeleton_final = vtk.vtkPolyData()
+        skeleton_final.SetPoints(skeleton_points_final)
+
+        randomDelaunay = vtk.vtkDelaunay2D()
+        randomDelaunay.SetInputData(skeleton_final)
+        randomDelaunay.SetAlpha(0.8)
+        randomDelaunay.Update()
+
+        return randomDelaunay.GetOutput()
+
+    def extract(self, input_poly, thresStd=0.75):
         """
         Removes the border (border region) of the passed vtkPolyData.
         To do this, a gradient field of elevation is built.
@@ -856,7 +888,7 @@ class MeshOperations:
         stdev = np.std(elevVals)
         print stdev
 
-        threshold = np.mean(elevVals) + 0.75*stdev#minVal + 2 * stdev
+        threshold = np.mean(elevVals) + thresStd*stdev#minVal + 2 * stdev
 
         skeleton_points_final = vtk.vtkPoints()  # here we add the points that we find
         for i in range(0, polydata.GetNumberOfPoints()):

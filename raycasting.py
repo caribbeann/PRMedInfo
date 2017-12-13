@@ -25,7 +25,7 @@ class RayCasting:
         pt12 = pt1-pt2
         return np.dot(pt12,pt12)
 
-    def findPoints(self,center):
+    def findPoints(self,center,otherPolydata):
         vmaths = vtk.vtkMath()
         pts = [None]*360
         bounds = self.poly_data.GetBounds()
@@ -34,52 +34,75 @@ class RayCasting:
         nbPts = 0
         nbRaysOk = 0
         lastRay = 0
+        indexInit = -1
         # perform ray casting and store it in pts
         for i in range (0,360):
             print i
             pt = self._rayCast(center,
-                               [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
+                                   [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i), center[2]])
             if pt != -1:
-                pts[i] = pt
                 nbPts = nbPts + len(pt)
                 nbRaysOk = nbRaysOk + 1
                 lastRay = i
-            else :
-                pts[i]=-1 #no found point
+                if indexInit==-1:
+                    indexInit=i
+            pts[i]=pt
+
+
+        tri = vtk.vtkTriangleFilter()
+        tri.SetInputData(otherPolydata)
+        tri.Update()
+        # if lastRay-indexInit<265:
+        #     rangeMin = max(0,indexInit-10)
+        #     indexInit=rangeMin
+        center[2]=otherPolydata.GetBounds()[5]
+        rangeMax = lastRay#max(lastRay, min(lastRay+10, 359))
+        for i in range(indexInit, rangeMax):
+            if pts[i] == -1:
+                pt = self._rayCast(center,
+                                       [-length * math.sin(angleStep * i), -length * math.cos(angleStep * i),
+                                        center[2]], otherPolydata, tri.GetOutput())
+                if pt!=-1:
+                    print i,pt
+                    pts[i]=pt
+                    nbPts = nbPts+len(pt)
+                    # if i > lastRay:
+                    #     lastRay = i
+
 
         # compute distances
         dists = np.zeros(shape=(nbPts, nbPts))
-        indexInit = -1
         i = 0
         ptIds = np.zeros(shape=(nbPts,2),dtype=np.uint32) # stores ray nb and pt index in ray, index = id in dists
         current = 0
         idmap = [None]*360 # idmap : stores the id (in dist) for each point (i corresponds to ray, j to pt index in ray)
 
-        #find first point(s)
-        while indexInit == -1 and i<360:
-            pt = pts[i]
-            if pt!=-1:  #found first point, go out of loop and stores characteristics of point
-                indexInit = i
-                previousPtsDistIdx = np.arange(len(pt))
-                prepreviousPtsDistIdx = previousPtsDistIdx
-                previousRay = indexInit
-                prepreviousRay = previousRay
-                currentIIndices = [0]*len(pt)
-                for j in range(0, len(pt)):
-                    ptIds[current, 0] = i
-                    ptIds[current, 1] = j
-                    currentIIndices[j] = current
-                    current = current + 1
-                idmap[i] = currentIIndices
-            i = i + 1
+        print pts[indexInit]
+
+        #init first point(s)
+        previousPtsDistIdx = np.arange(len(pts[indexInit]))
+        prepreviousPtsDistIdx = previousPtsDistIdx
+        previousRay = indexInit
+        prepreviousRay = previousRay
+        currentIIndices = [0]*len(pts[indexInit])
+        for j in range(0, len(pts[indexInit])):
+            ptIds[current, 0] = indexInit
+            ptIds[current, 1] = j
+            currentIIndices[j] = current
+            current = current + 1
+        idmap[indexInit] = currentIIndices
+
+
         stop = False
+
+
         gaps = vtk.vtkIdList()
         for i in range(indexInit+1, lastRay):
             if pts[i] != -1 and not stop:
                 currentPts = pts[i]
                 previousPts = pts[previousRay]
                 prepreviousPts = pts[prepreviousRay]
-                minDist = 100
+                minDist = 10000
                 maxDist = 0
                 currentIIndices = [0]*len(currentPts)
                 #compute distances and store them in distance matrix
@@ -91,6 +114,8 @@ class RayCasting:
                             minDist = currentDist
                         if currentDist>maxDist:
                             maxDist=currentDist
+                        if currentDist==0:
+                            print i,j,k,currentPts[j],previousPts[k]
                     #compute distances with points before previous points
                     for k in range (0,prepreviousPtsDistIdx.size):
                         currentDist = self.distPt(np.asarray(currentPts[j]),np.asarray(prepreviousPts[k]))
@@ -100,6 +125,8 @@ class RayCasting:
                     ptIds[current, 0] = i
                     ptIds[current, 1] = j
                     current = current + 1
+                if maxDist>1000:
+                    print ">1000",maxDist," ",minDist," ",i
                 if maxDist>1000 and i-indexInit>265:
                     stop = True
                     print 'stop'
@@ -107,7 +134,6 @@ class RayCasting:
                 elif minDist>0.15:
                     for j in range (0, previousPtsDistIdx.size):
                         gaps.InsertNextId(i)
-                    #print "gap ",i
 
                 prepreviousPtsDistIdx = previousPtsDistIdx
                 previousPtsDistIdx = np.arange(current-len(currentPts),current)
@@ -150,6 +176,7 @@ class RayCasting:
         while current!=optima[0]:
             pt = pts[ptIds[current, 0]][ptIds[current, 1]]
             points.InsertNextPoint([pt[0],pt[1],pt[2]])
+            print dist_matrix[predecessors[optima[0],current],current]
             current = predecessors[optima[0],current]
             i = i + 1
         print lastRay-indexInit
@@ -274,7 +301,7 @@ class RayCasting:
         return points.GetPoint(idMax)
 
 
-    def _rayCast(self,center,point1):
+    def _rayCast(self,center,point1,polydata=None,tripoly=None,shouldPrint=False):
         '''
         perform ray casting
         throw a plane through mesh passing through given points (center, point1)
@@ -285,10 +312,13 @@ class RayCasting:
         :return: the max height points for each cluster
         '''
         # perform ray casting
+        if polydata==None:
+            polydata = self.poly_data
+            tripoly = self.tripoly
         plane = vtk.vtkPlaneSource()
         plane.SetCenter(center)
         plane.SetPoint1(point1)
-        p = [center[0],center[1],self.poly_data.GetBounds()[4]]
+        p = [center[0],center[1],polydata.GetBounds()[4]]
         plane.SetPoint2(p)
         plane.Update()
 
@@ -297,7 +327,7 @@ class RayCasting:
         tri2.Update()
 
         inter = vtk.vtkIntersectionPolyDataFilter()
-        inter.SetInputData(0,self.tripoly)
+        inter.SetInputData(0,tripoly)
         inter.SetInputData(1,tri2.GetOutput())
         inter.SetSplitFirstOutput(0)
         inter.SetSplitSecondOutput(0)
@@ -308,6 +338,8 @@ class RayCasting:
 
         if points.GetNumberOfPoints()==0:
             return -1
+
+        #print points.GetNumberOfPoints()
         # if shouldPrint:
         #     rend = renderer.Renderer()
         #     rend.add_actor(self.poly_data, color=[1, 1, 1], wireframe=False)
@@ -319,7 +351,7 @@ class RayCasting:
             pts[i,:] = np.asarray(points.GetPoint(i))
 
         # Compute DBSCAN to cluster the points along rays into clusters
-        db = DBSCAN(eps=1).fit(pts)
+        db = DBSCAN(eps=1,min_samples=6).fit(pts)
         core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
         core_samples_mask[db.core_sample_indices_] = True
         labels = db.labels_
@@ -328,7 +360,10 @@ class RayCasting:
         labels = labels+1
 
         y = np.bincount(labels)
-        ii = np.nonzero(y)[0] #ignore noise
+        ii = np.nonzero(y[1:len(y)])[0] #ignore noise
+        if len(ii)==0:
+            return -1
+        ii = ii + 1
         ans = [None]*len(ii)
         ansIdx = 0
         for i in ii: # for each non noisy cluster, compute max
